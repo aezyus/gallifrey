@@ -15,6 +15,7 @@ dependencies = [
     "pywavelets>=1.9.0",
     "scikit-learn>=1.8.0",
     "PyWavelets",
+    "pytest",
     "seaborn>=0.13.2",
     "tensorboard>=2.20.0",
     "torch",
