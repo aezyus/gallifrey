@@ -2,14 +2,20 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 import json
+import time
+
 import numpy as np
+import pandas as pd
 import torch
 import torch.nn as nn
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field, validator
 
 import pickle
 import joblib
+from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_latest
 
 
 MODELS_DIR = Path(__file__).resolve().parent / "data" / "models"
@@ -266,11 +272,10 @@ class ModelBundle:
         if not self.feature_columns:
             raise RuntimeError("Model metadata (feature_columns) not found.")
 
-        X = np.array(
-            [[record.get(col, 0.0) for col in self.feature_columns] for record in records],
-            dtype=np.float32,
-        )
-        X_scaled = self.scaler_ml.transform(X)
+        # Build a DataFrame to preserve feature names for sklearn scalers/models.
+        df = pd.DataFrame(records)
+        df = df.reindex(columns=self.feature_columns).fillna(0.0)
+        X_scaled = self.scaler_ml.transform(df)
 
         # GBM risk classifier
         gbm = self.gbm_risk
@@ -326,6 +331,21 @@ app = FastAPI(
     version="0.1.0",
 )
 
+# CORS for frontend (e.g. Next.js)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Prometheus metrics
+REQUEST_COUNT = Counter("gallifrey_requests_total", "Request count", ["endpoint"])
+REQUEST_LATENCY = Histogram(
+    "gallifrey_request_latency_seconds", "Request latency in seconds", ["endpoint"]
+)
+
 
 @app.on_event("startup")
 def load_models_on_startup() -> None:
@@ -352,16 +372,64 @@ def health() -> dict:
     return {"status": "ok", "models": exists}
 
 
+@app.get("/metadata", summary="Model and feature metadata")
+def metadata() -> dict:
+    """
+    Expose model_meta.json and basic model availability for frontends.
+    """
+    if "model_bundle" not in globals():
+        raise HTTPException(status_code=500, detail={"error": {"code": "MODELS_NOT_LOADED", "message": "Models not loaded"}})
+
+    meta_path = MODELS_DIR / "model_meta.json"
+    meta = {}
+    if meta_path.exists():
+        with meta_path.open("r") as f:
+            meta = json.load(f)
+
+    exists = {
+        "scaler_anomaly": (MODELS_DIR / "scaler_anomaly.pkl").exists(),
+        "isolation_forest": (MODELS_DIR / "isolation_forest.pkl").exists(),
+        "autoencoder": (MODELS_DIR / "autoencoder.pt").exists(),
+        "scaler_ml": (MODELS_DIR / "scaler_ml.pkl").exists(),
+        "gbm_risk_classifier": (MODELS_DIR / "gbm_risk_classifier.pkl").exists(),
+        "rf_shi_regressor": (MODELS_DIR / "rf_shi_regressor.pkl").exists(),
+        "lstm_risk": (MODELS_DIR / "lstm_risk.pt").exists(),
+    }
+
+    return {
+        "meta": meta,
+        "models": exists,
+        "window_size_lstm": getattr(model_bundle, "window_size_lstm", None),
+        "feature_columns": getattr(model_bundle, "feature_columns", []),
+    }
+
+
+@app.get("/metrics")
+def metrics() -> Response:
+    """
+    Prometheus metrics endpoint.
+    """
+    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
+
 @app.post("/anomaly", response_model=AnomalyResponse, summary="Anomaly inference")
 def anomaly_inference(request: AnomalyRequest) -> AnomalyResponse:
+    start = time.perf_counter()
+    REQUEST_COUNT.labels("anomaly").inc()
     if "model_bundle" not in globals():
         raise HTTPException(status_code=500, detail="Models not loaded")
 
     X = np.array(request.samples, dtype=np.float32)
     try:
-        return model_bundle.predict(X)
+        response = model_bundle.predict(X)
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Inference failed: {exc}") from exc
+        raise HTTPException(
+            status_code=500,
+            detail={"error": {"code": "ANOMALY_INFERENCE_FAILED", "message": str(exc)}},
+        ) from exc
+    finally:
+        REQUEST_LATENCY.labels("anomaly").observe(time.perf_counter() - start)
+    return response
 
 
 @app.post("/risk", response_model=RiskResponse, summary="Risk/SHI inference (GBM + RF)")
@@ -375,11 +443,20 @@ def risk_inference(request: RiskRequest) -> RiskResponse:
     if "model_bundle" not in globals():
         raise HTTPException(status_code=500, detail="Models not loaded")
 
+    start = time.perf_counter()
+    REQUEST_COUNT.labels("risk").inc()
+
     records = [sample.features for sample in request.samples]
     try:
-        return model_bundle.predict_risk(records)
+        response = model_bundle.predict_risk(records)
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Risk inference failed: {exc}") from exc
+        raise HTTPException(
+            status_code=500,
+            detail={"error": {"code": "RISK_INFERENCE_FAILED", "message": str(exc)}},
+        ) from exc
+    finally:
+        REQUEST_LATENCY.labels("risk").observe(time.perf_counter() - start)
+    return response
 
 
 @app.post(
@@ -397,11 +474,21 @@ def risk_sequence_inference(request: RiskSequenceRequest) -> RiskSequenceRespons
     if "model_bundle" not in globals():
         raise HTTPException(status_code=500, detail="Models not loaded")
 
+    start = time.perf_counter()
+    REQUEST_COUNT.labels("risk_sequence").inc()
+
     records = [sample.features for sample in request.samples]
     try:
         pof = model_bundle.predict_lstm_sequence(records)
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"LSTM risk inference failed: {exc}") from exc
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": {"code": "RISK_SEQUENCE_INFERENCE_FAILED", "message": str(exc)}
+            },
+        ) from exc
+    finally:
+        REQUEST_LATENCY.labels("risk_sequence").observe(time.perf_counter() - start)
     return RiskSequenceResponse(pof=pof)
 
 

@@ -82,8 +82,8 @@ def main() -> None:
         )
         df_view = df.tail(latest_n)
 
-        tab1, tab2, tab3 = st.tabs(
-            ["Strain + anomalies", "IF score", "Reconstruction error"]
+        tab1, tab2, tab3, tab4 = st.tabs(
+            ["Strain + anomalies", "IF score", "Reconstruction error", "SHI & risk"]
         )
 
         with tab1:
@@ -114,6 +114,27 @@ def main() -> None:
                 )
             else:
                 st.info("No reconstruction error values available from the current model run.")
+
+        with tab4:
+            cols = st.columns(2)
+            with cols[0]:
+                if "shi_pred" in df_view.columns and df_view["shi_pred"].notna().any():
+                    st.subheader("Structural Health Index (SHI)")
+                    st.line_chart(
+                        df_view.set_index("timestamp")[["shi_pred"]],
+                        height=300,
+                    )
+                else:
+                    st.info("No SHI predictions available in the current stream.")
+            with cols[1]:
+                if "gbm_risk_score" in df_view.columns and df_view["gbm_risk_score"].notna().any():
+                    st.subheader("Risk score (GBM)")
+                    st.line_chart(
+                        df_view.set_index("timestamp")[["gbm_risk_score"]],
+                        height=300,
+                    )
+                else:
+                    st.info("No risk scores available in the current stream.")
 
 
 if __name__ == "__main__":
