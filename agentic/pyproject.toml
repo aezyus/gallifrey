@@ -25,4 +25,7 @@ dependencies = [
     "pydantic",
     "python-dotenv",
     "requests",
+    "streamlit>=1.55.0",
+    "python-multipart>=0.0.22",
+    "langchain-chroma>=1.1.0",
 ]

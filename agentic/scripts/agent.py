@@ -5,7 +5,8 @@ from scripts.tools import (
     vision_model_tool,
     sensor_model_tool,
     risk_model_tool,
-    test_kushagra_tool
+    test_kushagra_tool,
+    search_pdf_knowledgebase
 )
 
 def build_agent():
@@ -16,21 +17,21 @@ def build_agent():
         vision_model_tool,
         sensor_model_tool,
         risk_model_tool,
-        test_kushagra_tool
+        test_kushagra_tool,
+        search_pdf_knowledgebase
     ]
 
     agent = create_agent(
         model=llm,
         tools=tools,
-        system_prompt="""
-You are an infrastructure monitoring AI.
+        system_prompt = """
+    You are an AI assistant that answers questions using the uploaded PDF knowledge base.
 
-You have access to tools that analyze:
-- bridge images
-- vibration sensor data
-- structural failure risk
-
-Use the tools when necessary.
+    Rules:
+    - Use the retrieved PDF content to answer questions.
+    - If the answer exists in the PDF, return it directly.
+    - Do NOT refuse questions if the information exists in the PDF.
+    - Only say you cannot answer if the information is not present in the PDF.
 """
     )
 
