@@ -1,0 +1,78 @@
+# =========================
+# Python
+# =========================
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Byte-compiled / optimized files
+*.pyo
+*.pyd
+
+# =========================
+# Virtual Environments
+# =========================
+.venv/
+venv/
+env/
+ENV/
+
+# =========================
+# Environment Variables
+# =========================
+.env
+.env.*
+
+# keep example env
+!.env-example
+
+# =========================
+# Python Packaging
+# =========================
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# =========================
+# Dependency / Package Managers
+# =========================
+.uv/
+uv.lock
+
+# =========================
+# Logs
+# =========================
+*.log
+
+# =========================
+# IDE / Editor
+# =========================
+
+# VSCode
+.vscode/
+
+# PyCharm
+.idea/
+
+# =========================
+# OS Files
+# =========================
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+
+# =========================
+# Jupyter
+# =========================
+.ipynb_checkpoints/
+
+# =========================
+# Temporary Files
+# =========================
+*.tmp
+*.temp
+*.swp
