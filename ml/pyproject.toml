@@ -1,0 +1,33 @@
+[project]
+name = "ml"
+version = "0.1.0"
+description = "ML workflow for the project."
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "ipykernel>=7.2.0",
+    "jupyter>=1.1.1",
+    "matplotlib>=3.10.8",
+    "numpy>=2.4.3",
+    "optuna>=4.7.0",
+    "pandas>=3.0.1",
+    "plotly>=6.6.0",
+    "pywavelets>=1.9.0",
+    "scikit-learn>=1.8.0",
+    "PyWavelets",
+    "pytest",
+    "seaborn>=0.13.2",
+    "tensorboard>=2.20.0",
+    "torch",
+    "torchmetrics>=1.9.0",
+    "tqdm>=4.67.3",
+    "nbconvert[webpdf]>=7.17.0",
+]
+
+[[tool.uv.index]]
+name = "pytorch"
+url = "https://download.pytorch.org/whl/cu121"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch" }
