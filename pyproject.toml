@@ -1,0 +1,28 @@
+[project]
+name = "gallifrey"
+version = "0.1.0"
+description = "Agentic AI system for infrastructure structural intelligence"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "langchain",
+    "langchain-community",
+    "langchain-google-genai",
+    "google-generativeai",
+    "langgraph",
+    "tiktoken",
+    "chromadb",
+    "sentence-transformers",
+    "pypdf",
+    "unstructured",
+    "python-docx",
+    "beautifulsoup4",
+    "pandas",
+    "numpy",
+    "scikit-learn",
+    "fastapi",
+    "uvicorn",
+    "pydantic",
+    "python-dotenv",
+    "requests"
+]
