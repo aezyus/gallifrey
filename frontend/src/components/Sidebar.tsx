@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { 
@@ -16,6 +17,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
+import { gallifreyApi } from "@/lib/api";
 
 const navItems = [
   { name: 'Fleet Overview', icon: LayoutDashboard, href: '/' },
@@ -28,6 +30,31 @@ const navItems = [
 
 export function Sidebar() {
   const pathname = usePathname();
+  const [mlStatus, setMlStatus] = useState(false);
+  const [agenticStatus, setAgenticStatus] = useState(false);
+
+  useEffect(() => {
+    const probe = async () => {
+      try {
+        const [mlHealth, agenticHealth] = await Promise.all([
+          gallifreyApi.getHealth().then((data) => data?.status === "ok").catch(() => false),
+          gallifreyApi.getAgenticHealth().then((data) => data.ok).catch(() => false),
+        ]);
+
+        setMlStatus(Boolean(mlHealth));
+        setAgenticStatus(Boolean(agenticHealth));
+      } catch {
+        setMlStatus(false);
+        setAgenticStatus(false);
+      }
+    };
+
+    probe();
+    const interval = setInterval(probe, 10000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const coreOnline = mlStatus && agenticStatus;
 
   return (
     <aside className="fixed left-0 top-0 h-screen w-64 glass-card border-r border-white/5 flex flex-col z-50">
@@ -87,16 +114,20 @@ export function Sidebar() {
           <div className="absolute inset-0 bg-primary/5 opacity-0 group-hover:opacity-100 transition-opacity" />
           <div className="relative z-10">
             <div className="flex items-center gap-2 mb-2">
-              <Bot className="w-4 h-4 text-primary animate-pulse" />
+              <Bot className={cn("w-4 h-4", coreOnline ? "text-primary animate-pulse" : "text-red-400")} />
               <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">AI Core Status</span>
             </div>
-            <p className="text-xs font-bold text-white mb-2">Analyzing Node-04...</p>
+            <p className="text-xs font-bold text-white mb-2">{coreOnline ? "Inference + Agentic online" : "Backend degraded"}</p>
             <div className="h-1 w-full bg-white/10 rounded-full overflow-hidden">
                <motion.div 
-                animate={{ width: ["10%", "90%", "40%", "70%"] }}
-                transition={{ duration: 10, repeat: Infinity }}
-                className="h-full bg-primary" 
+                animate={{ width: coreOnline ? ["15%", "95%", "45%", "72%"] : ["8%", "12%"] }}
+                transition={{ duration: coreOnline ? 10 : 2, repeat: Infinity }}
+                className={cn("h-full", coreOnline ? "bg-primary" : "bg-red-500")} 
                />
+            </div>
+            <div className="mt-2 flex justify-between text-[9px] uppercase tracking-widest text-muted-foreground font-bold">
+              <span className={mlStatus ? "text-emerald-400" : "text-red-400"}>ML API</span>
+              <span className={agenticStatus ? "text-emerald-400" : "text-red-400"}>Agentic API</span>
             </div>
           </div>
         </div>

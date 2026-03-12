@@ -8,53 +8,97 @@ import {
 } from 'recharts';
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
-import { gallifreyApi, RiskResponse } from "@/lib/api";
+import { gallifreyApi } from "@/lib/api";
 
-const mockRiskHistory = [
-  { month: 'Jan', risk: 12, health: 98 },
-  { month: 'Feb', risk: 15, health: 97 },
-  { month: 'Mar', risk: 18, health: 95 },
-  { month: 'Apr', risk: 25, health: 92 },
-  { month: 'May', risk: 32, health: 88 },
-  { month: 'Jun', risk: 45, health: 82 },
-];
+// Removing static mock data
 
 const COLORS = ['#00f2ff', '#fbbf24', '#ef4444', '#10b981'];
 
 export default function Analytics() {
   const [activeTab, setActiveTab] = useState('prediction');
-  const [liveRisk, setLiveRisk] = useState<RiskResponse | null>(null);
+  const [liveRisk, setLiveRisk] = useState<{ riskScore: number; riskLabel: number; shi: number } | null>(null);
   const [loading, setLoading] = useState(true);
+  const [riskHistory, setRiskHistory] = useState<{time: string, risk: number, health: number}[]>([]);
 
   useEffect(() => {
-    const fetchRisk = async () => {
+    const buildFeatureSnapshot = (driftSeed = 0) => ({
+      Vibration_ms2: 118 + Math.sin(Date.now() / 900 + driftSeed) * 6 + Math.random() * 2,
+      Strain_microstrain: 43 + Math.cos(Date.now() / 1100 + driftSeed) * 3 + Math.random(),
+      Deflection_mm: 7.8 + Math.random() * 1.2,
+      Displacement_mm: 3.0 + Math.random() * 1.4,
+      Modal_Frequency_Hz: 12.2 + Math.sin(Date.now() / 1500) * 0.5,
+      Temperature_C: 24 + Math.random() * 4,
+      Wind_Speed_ms: 9 + Math.random() * 8,
+      Crack_Propagation_mm: 0.8 + Math.random() * 0.9,
+    });
+
+    const hydrateRiskHistory = async () => {
       setLoading(true);
       try {
-        // Simulating features for Bridge-A4
-        const features = [{
-          Vibration_ms2: 120.5,
-          Strain_microstrain: 45.2,
-          Deflection_mm: 8.1,
-          Displacement_mm: 3.4,
-          Modal_Frequency_Hz: 12.8,
-          Temperature_C: 24.5,
-          Wind_Speed_ms: 12.0,
-          Crack_Propagation_mm: 1.2
-        }];
-        const res = await gallifreyApi.predictRisk(features);
-        setLiveRisk(res);
+        const bootstrapSamples = Array.from({ length: 16 }, (_, idx) => buildFeatureSnapshot(idx / 3));
+        const res = await gallifreyApi.predictRisk(bootstrapSamples);
+
+        const now = Date.now();
+        const hydrated = res.gbm_risk_score.map((score, idx) => {
+          const timestamp = new Date(now - (res.gbm_risk_score.length - idx) * 3000);
+          return {
+            time: timestamp.toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+            risk: score * 100,
+            health: (res.shi_pred[idx] ?? 0) * 100,
+          };
+        });
+
+        setRiskHistory(hydrated);
+        const lastIndex = res.gbm_risk_score.length - 1;
+        setLiveRisk({
+          riskScore: (res.gbm_risk_score[lastIndex] ?? 0) * 100,
+          riskLabel: res.gbm_risk_label[lastIndex] ?? 0,
+          shi: (res.shi_pred[lastIndex] ?? 0) * 100,
+        });
       } catch (err) {
-        console.error("Risk fetching failed", err);
+        console.error("Risk hydration failed", err);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchRisk();
+    const pollNextRiskTick = async () => {
+      try {
+        const res = await gallifreyApi.predictRisk([buildFeatureSnapshot()]);
+        const riskScore = (res.gbm_risk_score[0] ?? 0) * 100;
+        const shi = (res.shi_pred[0] ?? 0) * 100;
+
+        setLiveRisk({
+          riskScore,
+          riskLabel: res.gbm_risk_label[0] ?? 0,
+          shi,
+        });
+
+        setRiskHistory((prev) => {
+          const next = [
+            ...prev,
+            {
+              time: new Date().toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+              risk: riskScore,
+              health: shi,
+            },
+          ];
+          if (next.length > 24) next.shift();
+          return next;
+        });
+      } catch (err) {
+        console.error("Risk polling failed", err);
+      }
+    };
+
+    hydrateRiskHistory();
+    const interval = setInterval(pollNextRiskTick, 3500);
+    return () => clearInterval(interval);
   }, []);
 
-  const riskScore = liveRisk ? (liveRisk.gbm_risk_score[0] * 100).toFixed(1) : "Calculating...";
-  const shiScore = liveRisk ? (liveRisk.shi_pred[0] * 100).toFixed(1) : "94.2";
+  const riskScore = liveRisk ? liveRisk.riskScore.toFixed(1) : "Calculating";
+  const shiScore = liveRisk ? liveRisk.shi.toFixed(1) : "94.2";
+  const reliabilityLabel = Number(shiScore) > 70 ? "Minimal Risk" : "Attention Required";
 
   return (
     <div className="space-y-8">
@@ -127,16 +171,16 @@ export default function Analytics() {
 
             <div className="h-[400px]">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={mockRiskHistory} barGap={12}>
+                <BarChart data={riskHistory} barGap={12}>
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
-                  <XAxis dataKey="month" stroke="rgba(255,255,255,0.3)" fontSize={12} tickLine={false} axisLine={false} />
-                  <YAxis stroke="rgba(255,255,255,0.3)" fontSize={12} tickLine={false} axisLine={false} />
+                  <XAxis dataKey="time" stroke="rgba(255,255,255,0.3)" fontSize={10} tickLine={false} axisLine={false} />
+                  <YAxis domain={[0, 100]} stroke="rgba(255,255,255,0.3)" fontSize={12} tickLine={false} axisLine={false} />
                   <Tooltip 
                     cursor={{fill: 'rgba(255,255,255,0.05)'}}
                     contentStyle={{ backgroundColor: '#0a0b10', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px' }}
                   />
                   <Bar dataKey="risk" radius={[6, 6, 0, 0]}>
-                    {mockRiskHistory.map((entry, index) => (
+                    {riskHistory.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={entry.risk > 30 ? 'rgba(251, 191, 36, 0.8)' : 'rgba(0, 242, 255, 0.8)'} />
                     ))}
                   </Bar>
@@ -152,7 +196,7 @@ export default function Analytics() {
                 <div>
                   <h4 className="font-bold text-sm">Predictive Insight</h4>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Ensemble model predicts a **{liveRisk?.gbm_risk_label[0] === 1 ? 'HIGH' : 'LOW'}** risk status for the current telemetry snapshot. 
+                    Ensemble model predicts a **{liveRisk?.riskLabel === 1 ? 'HIGH' : 'LOW'}** risk status for the current telemetry snapshot. 
                     Baseline drift detected in Modal Frequency bands.
                   </p>
                 </div>
@@ -200,7 +244,7 @@ export default function Analytics() {
                   First Passage Reliability remains within the 99.9% safety corridor.
                 </p>
                 <div className="mt-6 text-2xl font-bold text-emerald-500 uppercase tracking-widest">
-                  {shiScore > "70" ? "Minimal Risk" : "Attention Required"}
+                  {reliabilityLabel}
                 </div>
              </div>
           </div>

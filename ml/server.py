@@ -1,5 +1,7 @@
 from pathlib import Path
 from typing import Dict, List, Optional
+from contextlib import contextmanager
+import os
 
 import json
 import time
@@ -15,10 +17,15 @@ from pydantic import BaseModel, Field, validator
 
 import pickle
 import joblib
+import psycopg
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_latest
 
 
 MODELS_DIR = Path(__file__).resolve().parent / "data" / "models"
+DB_DSN = os.getenv(
+    "GALLIFREY_DB_DSN",
+    "postgresql://postgres:postgres@localhost:5432/infra_monitoring",
+)
 
 
 class AnomalyRequest(BaseModel):
@@ -79,6 +86,45 @@ class RiskSequenceRequest(BaseModel):
 
 class RiskSequenceResponse(BaseModel):
     pof: float
+
+
+class StructureCreateRequest(BaseModel):
+    name: str
+    type: str
+    location: str
+    notes: Optional[str] = None
+
+
+class StructureResponse(BaseModel):
+    id: int
+    name: str
+    type: str
+    location: str
+    notes: Optional[str] = None
+    created_at: str
+
+
+class SensorCreateRequest(BaseModel):
+    name: str
+    type: str
+    x: float = 0.0
+    y: float = 0.0
+    z: float = 0.0
+    stream_url: Optional[str] = "mock://sensor-feed"
+    connected: bool = True
+
+
+class SensorResponse(BaseModel):
+    id: int
+    structure_id: int
+    name: str
+    type: str
+    x: float
+    y: float
+    z: float
+    stream_url: Optional[str] = None
+    connected: bool
+    created_at: str
 
 
 class LSTMRiskPredictor(nn.Module):
@@ -352,16 +398,67 @@ def get_metric(metric_type, name, description, labels):
 # Initialize metrics safely
 REQUEST_COUNT = get_metric(Counter, "gallifrey_requests_total", "Request count", ["endpoint"])
 REQUEST_LATENCY = get_metric(Histogram, "gallifrey_request_latency_seconds", "Request latency in seconds", ["endpoint"])
+STRUCTURES_DB_READY = False
+
+
+@contextmanager
+def db_conn():
+    conn = psycopg.connect(DB_DSN)
+    try:
+        yield conn
+    finally:
+        conn.close()
+
+
+def init_structures_schema() -> None:
+    with db_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS structures (
+                    id BIGSERIAL PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    type TEXT NOT NULL,
+                    location TEXT NOT NULL,
+                    notes TEXT,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                );
+                """
+            )
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS sensors (
+                    id BIGSERIAL PRIMARY KEY,
+                    structure_id BIGINT NOT NULL REFERENCES structures(id) ON DELETE CASCADE,
+                    name TEXT NOT NULL,
+                    type TEXT NOT NULL,
+                    x DOUBLE PRECISION NOT NULL DEFAULT 0,
+                    y DOUBLE PRECISION NOT NULL DEFAULT 0,
+                    z DOUBLE PRECISION NOT NULL DEFAULT 0,
+                    stream_url TEXT,
+                    connected BOOLEAN NOT NULL DEFAULT TRUE,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                );
+                """
+            )
+        conn.commit()
 
 
 @app.on_event("startup")
 def load_models_on_startup() -> None:
+    global STRUCTURES_DB_READY
     global model_bundle
     try:
         model_bundle = ModelBundle()
     except Exception as exc:  # pragma: no cover - defensive
         # If models fail to load, make it obvious at startup
         raise RuntimeError(f"Failed to load models: {exc}") from exc
+
+    try:
+        init_structures_schema()
+        STRUCTURES_DB_READY = True
+    except Exception:
+        STRUCTURES_DB_READY = False
 
 
 @app.get("/health", summary="Health check")
@@ -376,7 +473,7 @@ def health() -> dict:
         "lstm_risk": (MODELS_DIR / "lstm_risk.pt").exists(),
         "model_meta": (MODELS_DIR / "model_meta.json").exists(),
     }
-    return {"status": "ok", "models": exists}
+    return {"status": "ok", "models": exists, "structures_db_ready": STRUCTURES_DB_READY}
 
 
 @app.get("/metadata", summary="Model and feature metadata")
@@ -409,6 +506,190 @@ def metadata() -> dict:
         "window_size_lstm": getattr(model_bundle, "window_size_lstm", None),
         "feature_columns": getattr(model_bundle, "feature_columns", []),
     }
+
+
+def ensure_structures_db_ready() -> None:
+    if not STRUCTURES_DB_READY:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "error": {
+                    "code": "STRUCTURES_DB_UNAVAILABLE",
+                    "message": "Structures DB is unavailable. Ensure TimescaleDB/Postgres is running.",
+                }
+            },
+        )
+
+
+@app.get("/structures", response_model=List[StructureResponse], summary="List structures")
+def list_structures() -> List[StructureResponse]:
+    ensure_structures_db_ready()
+    with db_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT id, name, type, location, notes, created_at
+                FROM structures
+                ORDER BY created_at DESC;
+                """
+            )
+            rows = cur.fetchall()
+
+    return [
+        StructureResponse(
+            id=row[0],
+            name=row[1],
+            type=row[2],
+            location=row[3],
+            notes=row[4],
+            created_at=row[5].isoformat(),
+        )
+        for row in rows
+    ]
+
+
+@app.post("/structures", response_model=StructureResponse, summary="Create structure")
+def create_structure(payload: StructureCreateRequest) -> StructureResponse:
+    ensure_structures_db_ready()
+    with db_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO structures (name, type, location, notes)
+                VALUES (%s, %s, %s, %s)
+                RETURNING id, name, type, location, notes, created_at;
+                """,
+                (payload.name, payload.type, payload.location, payload.notes),
+            )
+            row = cur.fetchone()
+        conn.commit()
+
+    return StructureResponse(
+        id=row[0],
+        name=row[1],
+        type=row[2],
+        location=row[3],
+        notes=row[4],
+        created_at=row[5].isoformat(),
+    )
+
+
+@app.get("/structures/{structure_id}", response_model=StructureResponse, summary="Get structure")
+def get_structure(structure_id: int) -> StructureResponse:
+    ensure_structures_db_ready()
+    with db_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT id, name, type, location, notes, created_at
+                FROM structures
+                WHERE id = %s;
+                """,
+                (structure_id,),
+            )
+            row = cur.fetchone()
+
+    if row is None:
+        raise HTTPException(status_code=404, detail={"error": {"code": "STRUCTURE_NOT_FOUND", "message": "Structure not found"}})
+
+    return StructureResponse(
+        id=row[0],
+        name=row[1],
+        type=row[2],
+        location=row[3],
+        notes=row[4],
+        created_at=row[5].isoformat(),
+    )
+
+
+@app.get(
+    "/structures/{structure_id}/sensors",
+    response_model=List[SensorResponse],
+    summary="List structure sensors",
+)
+def list_structure_sensors(structure_id: int) -> List[SensorResponse]:
+    ensure_structures_db_ready()
+    with db_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT 1 FROM structures WHERE id = %s;", (structure_id,))
+            exists = cur.fetchone()
+            if not exists:
+                raise HTTPException(status_code=404, detail={"error": {"code": "STRUCTURE_NOT_FOUND", "message": "Structure not found"}})
+
+            cur.execute(
+                """
+                SELECT id, structure_id, name, type, x, y, z, stream_url, connected, created_at
+                FROM sensors
+                WHERE structure_id = %s
+                ORDER BY created_at ASC;
+                """,
+                (structure_id,),
+            )
+            rows = cur.fetchall()
+
+    return [
+        SensorResponse(
+            id=row[0],
+            structure_id=row[1],
+            name=row[2],
+            type=row[3],
+            x=row[4],
+            y=row[5],
+            z=row[6],
+            stream_url=row[7],
+            connected=row[8],
+            created_at=row[9].isoformat(),
+        )
+        for row in rows
+    ]
+
+
+@app.post(
+    "/structures/{structure_id}/sensors",
+    response_model=SensorResponse,
+    summary="Add sensor to structure",
+)
+def add_sensor(structure_id: int, payload: SensorCreateRequest) -> SensorResponse:
+    ensure_structures_db_ready()
+    with db_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT 1 FROM structures WHERE id = %s;", (structure_id,))
+            exists = cur.fetchone()
+            if not exists:
+                raise HTTPException(status_code=404, detail={"error": {"code": "STRUCTURE_NOT_FOUND", "message": "Structure not found"}})
+
+            cur.execute(
+                """
+                INSERT INTO sensors (structure_id, name, type, x, y, z, stream_url, connected)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                RETURNING id, structure_id, name, type, x, y, z, stream_url, connected, created_at;
+                """,
+                (
+                    structure_id,
+                    payload.name,
+                    payload.type,
+                    payload.x,
+                    payload.y,
+                    payload.z,
+                    payload.stream_url,
+                    payload.connected,
+                ),
+            )
+            row = cur.fetchone()
+        conn.commit()
+
+    return SensorResponse(
+        id=row[0],
+        structure_id=row[1],
+        name=row[2],
+        type=row[3],
+        x=row[4],
+        y=row[5],
+        z=row[6],
+        stream_url=row[7],
+        connected=row[8],
+        created_at=row[9].isoformat(),
+    )
 
 
 @app.get("/metrics")

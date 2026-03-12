@@ -1,28 +1,57 @@
 "use client";
 
 import { motion, AnimatePresence } from "framer-motion";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Maximize2, RotateCcw, Activity } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAnomalySocket } from "@/hooks/useAnomalySocket";
 
 export function DigitalTwin({ health = 92 }: { health?: number }) {
   const [activeSegment, setActiveSegment] = useState<number | null>(null);
+  const [anomalies, setAnomalies] = useState<boolean[]>(Array(5).fill(false));
+  const [scores, setScores] = useState<number[]>(Array(5).fill(0));
+  const [reconstruction, setReconstruction] = useState<number[]>(Array(5).fill(0));
+  const { lastResponse, isConnected } = useAnomalySocket({
+    autoTelemetry: true,
+    intervalMs: 1200,
+    sampleCount: 5,
+    featureCount: 8,
+  });
+
+  useEffect(() => {
+    if (!lastResponse) return;
+
+    if (lastResponse.is_anomaly.length >= 5) {
+      setAnomalies(lastResponse.is_anomaly.slice(0, 5));
+    }
+
+    if (lastResponse.isolation_forest_score.length >= 5) {
+      setScores(lastResponse.isolation_forest_score.slice(0, 5));
+    }
+
+    if (lastResponse.reconstruction_error?.length) {
+      setReconstruction(lastResponse.reconstruction_error.slice(0, 5));
+    }
+  }, [lastResponse]);
   
-  // Segment health colors
-  const getSegmentColor = (h: number) => {
-    if (h > 80) return "stroke-emerald-500";
-    if (h > 50) return "stroke-yellow-500";
-    return "stroke-red-500";
+  // Segment health colors based on live anomaly status
+  const getSegmentColor = (idx: number) => {
+    if (anomalies[idx]) return "stroke-red-500 shadow-[0_0_20px_rgba(239,68,68,0.8)]";
+    if ((reconstruction[idx] || 0) > 0.06) return "stroke-yellow-400";
+    return "stroke-emerald-500";
   };
 
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground flex items-center gap-2">
-           <Activity className="w-4 h-4 text-primary" />
-           Virtual Asset Twin // Simulation Mode
+            <Activity className={cn("w-4 h-4", isConnected ? "text-emerald-500 animate-pulse" : "text-primary")} />
+           Virtual Asset Twin // Live Telemetry
         </h3>
         <div className="flex gap-2">
+           <div className="px-2.5 py-1 bg-white/5 rounded-lg border border-white/10 text-[10px] font-bold tracking-widest text-muted-foreground">
+             BASE SHI {health}%
+           </div>
            <button className="p-1.5 bg-white/5 rounded-lg hover:bg-white/10 transition-colors"><RotateCcw className="w-3.5 h-3.5" /></button>
            <button className="p-1.5 bg-white/5 rounded-lg hover:bg-white/10 transition-colors"><Maximize2 className="w-3.5 h-3.5" /></button>
         </div>
@@ -40,13 +69,12 @@ export function DigitalTwin({ health = 92 }: { health?: number }) {
             <path d="M50,250 Q400,240 750,250" className="stroke-white/10" strokeDasharray="10 10" />
 
             {/* Main Deck segments */}
-            {[0, 1, 2, 3, 4, 5].map((i) => {
-              const segmentHealth = i === 2 ? 45 : i === 4 ? 65 : 95; 
+            {[0, 1, 2, 3, 4].map((i) => {
               return (
                 <motion.path
                   key={i}
-                  d={`M${100 + i * 120},200 L${220 + i * 120},200`}
-                  className={cn("transition-all duration-1000", getSegmentColor(segmentHealth))}
+                  d={`M${100 + i * 144},200 L${244 + i * 144},200`}
+                  className={cn("transition-all duration-700", getSegmentColor(i))}
                   initial={{ strokeDasharray: 200, strokeDashoffset: 200 }}
                   animate={{ strokeDashoffset: 0 }}
                   whileHover={{ strokeWidth: 8 }}
@@ -88,15 +116,30 @@ export function DigitalTwin({ health = 92 }: { health?: number }) {
               <p className="text-[10px] text-primary uppercase font-bold tracking-widest mb-1">Segment {activeSegment + 1} Status</p>
               <div className="space-y-2">
                 <div className="flex justify-between text-xs">
-                  <span className="text-muted-foreground">Load Stress</span>
-                  <span className="font-bold">24.2 kN/m</span>
+                  <span className="text-muted-foreground">Anomaly Flag</span>
+                  <span className={cn("font-bold", anomalies[activeSegment] ? "text-red-500" : "text-emerald-500")}>
+                    {anomalies[activeSegment] ? "CRITICAL" : "NOMINAL"}
+                  </span>
                 </div>
                 <div className="flex justify-between text-xs">
-                  <span className="text-muted-foreground">Strain Index</span>
-                  <span className="font-bold">{activeSegment === 2 ? "0.88 (HIGH)" : "0.12 (NORM)"}</span>
+                  <span className="text-muted-foreground">iForest Score</span>
+                  <span className="font-bold">{scores[activeSegment]?.toFixed(4) || "0.0000"}</span>
+                </div>
+                <div className="flex justify-between text-xs">
+                  <span className="text-muted-foreground">Recon Error</span>
+                  <span className="font-bold text-cyan-300">{(reconstruction[activeSegment] || 0).toFixed(4)}</span>
                 </div>
                 <div className="h-1 w-full bg-white/10 rounded-full mt-2 overflow-hidden">
-                   <div className={cn("h-full", activeSegment === 2 ? "bg-red-500 w-[88%]" : "bg-emerald-500 w-[12%]")} />
+                   <div 
+                     className={cn("h-full transition-all duration-500", anomalies[activeSegment] ? "bg-red-500" : "bg-emerald-500")} 
+                     style={{ width: `${Math.min(100, Math.max(0, (scores[activeSegment] + 0.5) * 100))}%` }}
+                   />
+                </div>
+                <div className="h-1 w-full bg-white/10 rounded-full overflow-hidden">
+                  <div
+                    className={cn("h-full transition-all duration-500", (reconstruction[activeSegment] || 0) > 0.06 ? "bg-yellow-500" : "bg-cyan-400")}
+                    style={{ width: `${Math.min(100, Math.max(0, (reconstruction[activeSegment] || 0) * 1400))}%` }}
+                  />
                 </div>
               </div>
             </motion.div>

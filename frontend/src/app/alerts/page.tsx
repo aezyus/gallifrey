@@ -1,17 +1,95 @@
 "use client";
 
-import { AlertTriangle, ShieldAlert, CheckCircle, Bell, Filter, Search } from "lucide-react";
+import { useEffect, useState } from "react";
+import { AlertTriangle, ShieldAlert, Bell, Filter, Search } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
+import { useAnomalySocket } from "@/hooks/useAnomalySocket";
 
-const mockAlerts = [
-  { id: 1, type: 'critical', structure: 'North-Support-Pillar', msg: 'Resonant frequency shift detected (+12Hz). Potential joint fatigue.', time: '2 mins ago', status: 'pending' },
-  { id: 2, type: 'warning', structure: 'Bridge-A4 (Main)', msg: 'Vibration RMS exceeding 0.4g corridor.', time: '14 mins ago', status: 'acknowledged' },
-  { id: 3, type: 'warning', structure: 'East-Extension', msg: 'Strain sensor EL-04 reporting intermittent packets.', time: '1 hour ago', status: 'pending' },
-  { id: 4, type: 'info', structure: 'System', msg: 'Backup sync completed successfully.', time: '3 hours ago', status: 'resolved' },
+type AlertType = "critical" | "warning" | "info";
+type AlertStatus = "pending" | "acknowledged" | "resolved";
+
+interface LiveAlert {
+  id: string;
+  type: AlertType;
+  structure: string;
+  msg: string;
+  time: string;
+  status: AlertStatus;
+}
+
+const STRUCTURE_NAMES = [
+  "Bridge-A4 (Main)",
+  "West-Arch-Span",
+  "North-Support-Pillar",
+  "East-Extension",
+  "South-Tower",
 ];
 
 export default function AlertsPage() {
+  const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | AlertStatus>("all");
+  const [alerts, setAlerts] = useState<LiveAlert[]>([]);
+
+  useAnomalySocket({
+    autoTelemetry: true,
+    intervalMs: 1100,
+    sampleCount: 5,
+    featureCount: 8,
+  });
+
+  const { lastResponse } = useAnomalySocket();
+
+  useEffect(() => {
+    if (!lastResponse) return;
+
+    const incoming: LiveAlert[] = [];
+    lastResponse.is_anomaly.forEach((isAnomaly, index) => {
+      const iso = lastResponse.isolation_forest_score[index] ?? 0;
+      const recon = lastResponse.reconstruction_error?.[index] ?? 0;
+      if (!isAnomaly && Math.abs(iso) < 0.06 && recon < 0.05) return;
+
+      const type: AlertType = isAnomaly || recon > 0.08 ? "critical" : Math.abs(iso) > 0.04 ? "warning" : "info";
+      incoming.push({
+        id: `${Date.now()}-${index}`,
+        type,
+        structure: STRUCTURE_NAMES[index] ?? `Asset-${index + 1}`,
+        msg:
+          type === "critical"
+            ? `Anomalous response detected. iForest=${iso.toFixed(4)}, reconstruction=${recon.toFixed(4)}.`
+            : type === "warning"
+              ? `Elevated drift observed. iForest=${iso.toFixed(4)}.`
+              : `Telemetry jitter normalized. Monitoring continues.`,
+        time: new Date().toLocaleTimeString([], { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" }),
+        status: "pending",
+      });
+    });
+
+    if (!incoming.length) return;
+
+    setAlerts((prev) => {
+      const merged = [...incoming, ...prev];
+      return merged.slice(0, 60);
+    });
+  }, [lastResponse]);
+
+  const filteredAlerts = alerts.filter((alert) => {
+    const matchesStatus = statusFilter === "all" ? true : alert.status === statusFilter;
+    const q = query.trim().toLowerCase();
+    const matchesQuery =
+      q.length === 0 ||
+      alert.structure.toLowerCase().includes(q) ||
+      alert.msg.toLowerCase().includes(q) ||
+      alert.id.toLowerCase().includes(q);
+    return matchesStatus && matchesQuery;
+  });
+
+  const criticalCount = alerts.filter((a) => a.type === "critical" && a.status === "pending").length;
+
+  const updateAlertStatus = (id: string, status: AlertStatus) => {
+    setAlerts((prev) => prev.map((a) => (a.id === id ? { ...a, status } : a)));
+  };
+
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
       <header className="flex justify-between items-center text-white">
@@ -24,7 +102,7 @@ export default function AlertsPage() {
             <Filter className="w-5 h-5" />
           </button>
           <div className="px-6 py-2 bg-red-500/10 border border-red-500/30 rounded-xl text-red-500 font-bold text-xs uppercase tracking-widest flex items-center gap-2">
-            <ShieldAlert className="w-4 h-4" /> 2 Critical Events
+            <ShieldAlert className="w-4 h-4" /> {criticalCount} Critical Events
           </div>
         </div>
       </header>
@@ -36,13 +114,31 @@ export default function AlertsPage() {
           <input 
             type="text" 
             placeholder="Search alerts by structure, type or ID..." 
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
             className="bg-transparent border-none outline-none text-sm w-full placeholder:text-muted-foreground/50"
           />
+          <div className="flex items-center gap-2 text-[10px] uppercase font-bold tracking-widest">
+            {(["all", "pending", "acknowledged", "resolved"] as const).map((state) => (
+              <button
+                key={state}
+                onClick={() => setStatusFilter(state)}
+                className={cn(
+                  "px-2.5 py-1 rounded-md border transition-colors",
+                  statusFilter === state
+                    ? "border-primary/40 bg-primary/10 text-primary"
+                    : "border-white/10 text-muted-foreground hover:bg-white/10"
+                )}
+              >
+                {state}
+              </button>
+            ))}
+          </div>
         </div>
 
         <div className="divide-y divide-white/5">
           <AnimatePresence>
-            {mockAlerts.map((alert, i) => (
+            {filteredAlerts.map((alert, i) => (
               <motion.div 
                 key={alert.id}
                 initial={{ opacity: 0, y: 10 }}
@@ -73,8 +169,17 @@ export default function AlertsPage() {
                     <button className="px-4 py-1.5 rounded-lg border border-white/10 text-[10px] font-bold uppercase tracking-widest hover:bg-white/5 transition-all">
                       View Trace
                     </button>
-                    <button className="px-4 py-1.5 rounded-lg bg-primary/10 border border-primary/20 text-[10px] font-bold uppercase tracking-widest text-primary hover:bg-primary/20 transition-all">
+                    <button
+                      onClick={() => updateAlertStatus(alert.id, "acknowledged")}
+                      className="px-4 py-1.5 rounded-lg bg-primary/10 border border-primary/20 text-[10px] font-bold uppercase tracking-widest text-primary hover:bg-primary/20 transition-all"
+                    >
                       Acknowledge
+                    </button>
+                    <button
+                      onClick={() => updateAlertStatus(alert.id, "resolved")}
+                      className="px-4 py-1.5 rounded-lg border border-emerald-500/30 text-emerald-400 text-[10px] font-bold uppercase tracking-widest hover:bg-emerald-500/10 transition-all"
+                    >
+                      Resolve
                     </button>
                   </div>
                 </div>
@@ -94,8 +199,11 @@ export default function AlertsPage() {
       </div>
       
       <div className="flex justify-center">
-        <button className="text-xs font-bold uppercase tracking-widest text-muted-foreground hover:text-primary transition-colors">
-          Load Archive History
+        <button
+          onClick={() => setAlerts([])}
+          className="text-xs font-bold uppercase tracking-widest text-muted-foreground hover:text-primary transition-colors"
+        >
+          Clear Volatile Queue
         </button>
       </div>
     </div>

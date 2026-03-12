@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { MessageSquare, Send, X, Bot, User, Sparkles, AlertCircle, BarChart3, Fingerprint } from "lucide-react";
+import { Send, X, Bot, User, Sparkles, AlertCircle, BarChart3, Fingerprint } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { gallifreyApi } from "@/lib/api";
@@ -9,6 +9,10 @@ import { gallifreyApi } from "@/lib/api";
 interface Message {
   role: 'user' | 'assistant';
   content: string;
+}
+
+interface MetadataResponse {
+  feature_columns?: string[];
 }
 
 const SUGGESTIONS = [
@@ -20,11 +24,13 @@ const SUGGESTIONS = [
 export function AIAssistant() {
   const [isOpen, setIsOpen] = useState(false);
   const [input, setInput] = useState("");
+  const [isTyping, setIsTyping] = useState(false);
   const [messages, setMessages] = useState<Message[]>([
     { role: 'assistant', content: "Systems online. I am Gallifrey-01. How can I assist with your structural audit today?" }
   ]);
-  const [metadata, setMetadata] = useState<any>(null);
+  const [metadata, setMetadata] = useState<MetadataResponse | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const threadIdRef = useRef<string>(`thread-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
 
   useEffect(() => {
     gallifreyApi.getMetadata().then(setMetadata).catch(console.error);
@@ -42,29 +48,17 @@ export function AIAssistant() {
     
     setMessages(prev => [...prev, { role: 'user', content: textToSend }]);
     if (!textOverride) setInput("");
+    setIsTyping(true);
 
-    // Thinking state
-    setMessages(prev => [...prev, { role: 'assistant', content: "..." }]);
-
-    setTimeout(() => {
-      let response = "";
-      const text = textToSend.toLowerCase();
-
-      if (text.includes("status") || text.includes("health") || text.includes("summary")) {
-        response = `All systems nominal. Analyzing ${metadata?.anomaly_features?.length || 8} primary sensor channels. Cluster integrity at 98.4%. No active breaches detected.`;
-      } else if (text.includes("risk") || text.includes("bridge")) {
-        response = "Bridge-A4 telemetrics show a localized strain concentration in the main span (Segment 3). Cumulative SHI remains at 94.2. No critical failure predicted in next 180 days.";
-      } else if (text.includes("sensor") || text.includes("feature")) {
-        response = `Active telemetry channels: ${metadata?.anomaly_features?.join(", ") || 'Vibration, Strain, Deflection, Displacement, Frequency, Temperature, Wind, Crack'}. Synchronization status: FIXED.`;
-      } else {
-        response = "Data verified. Telemetry audit shows vibration RMS within standard 2-sigma deviation. Digital Twin synchronized.";
-      }
-
-      setMessages(prev => {
-        const filtered = prev.filter(m => m.content !== "...");
-        return [...filtered, { role: 'assistant', content: response }];
-      });
-    }, 800);
+    try {
+      const chatRes = await gallifreyApi.sendChat(textToSend, threadIdRef.current);
+      setMessages(prev => [...prev, { role: 'assistant', content: chatRes.response }]);
+    } catch (error) {
+       console.error("Chat failure", error);
+       setMessages(prev => [...prev, { role: 'assistant', content: "Agentic Core is offline. Please try again later." }]);
+    } finally {
+      setIsTyping(false);
+    }
   };
 
   return (
@@ -75,7 +69,7 @@ export function AIAssistant() {
             initial={{ opacity: 0, scale: 0.9, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.9, y: 20 }}
-            className="mb-4 w-[400px] h-[600px] glass-card rounded-[2.5rem] flex flex-col overflow-hidden border-primary/20 shadow-[0_30px_70px_rgba(0,0,0,0.6)]"
+            className="mb-4 w-[400px] h-[600px] glass-card rounded-[2.5rem] flex flex-col overflow-hidden border-primary/20 shadow-[0_30px_70px_rgba(0,0,0,0.6)] bg-gradient-to-b from-white/[0.08] to-black/70"
           >
             {/* Header */}
             <div className="p-6 bg-primary/10 border-b border-white/5 flex justify-between items-center relative">
@@ -113,13 +107,13 @@ export function AIAssistant() {
                   )}
                 >
                   <div className={cn(
-                    "p-2.5 rounded-xl shrink-0 mt-1",
+                    "p-2.5 rounded-xl shrink-0 mt-1 shadow-[0_0_15px_rgba(0,242,255,0.1)]",
                     m.role === 'user' ? "bg-primary/20 border border-primary/20" : "bg-white/5 border border-white/5"
                   )}>
                     {m.role === 'user' ? <User className="w-4 h-4 text-primary" /> : <Sparkles className="w-4 h-4 text-primary" />}
                   </div>
                   <div className={cn(
-                    "max-w-[80%] p-4 rounded-3xl text-xs leading-relaxed font-medium shadow-sm",
+                    "max-w-[80%] p-4 rounded-3xl text-sm leading-relaxed font-medium shadow-sm",
                     m.role === 'user' 
                       ? "bg-primary text-primary-foreground rounded-tr-none" 
                       : "bg-white/[0.03] text-white/90 rounded-tl-none border border-white/10"
@@ -128,6 +122,25 @@ export function AIAssistant() {
                   </div>
                 </motion.div>
               ))}
+
+              {isTyping && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="flex items-start gap-4"
+                >
+                  <div className="p-2.5 rounded-xl shrink-0 mt-1 shadow-[0_0_15px_rgba(0,242,255,0.1)] bg-white/5 border border-white/5">
+                    <Sparkles className="w-4 h-4 text-primary" />
+                  </div>
+                  <div className="max-w-[80%] p-4 rounded-3xl rounded-tl-none text-sm leading-relaxed font-medium shadow-sm bg-white/[0.03] text-white/90 border border-white/10">
+                    <div className="flex gap-1 items-center h-4 px-2">
+                      <motion.div animate={{ y: [0, -3, 0] }} transition={{ repeat: Infinity, duration: 0.6, delay: 0 }} className="w-1.5 h-1.5 bg-white/40 rounded-full" />
+                      <motion.div animate={{ y: [0, -3, 0] }} transition={{ repeat: Infinity, duration: 0.6, delay: 0.2 }} className="w-1.5 h-1.5 bg-white/40 rounded-full" />
+                      <motion.div animate={{ y: [0, -3, 0] }} transition={{ repeat: Infinity, duration: 0.6, delay: 0.4 }} className="w-1.5 h-1.5 bg-white/40 rounded-full" />
+                    </div>
+                  </div>
+                </motion.div>
+              )}
             </div>
 
             {/* Smart Suggestions */}
@@ -151,17 +164,24 @@ export function AIAssistant() {
                   type="text"
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+                  onKeyDown={(e) => e.key === 'Enter' && !isTyping && handleSend()}
                   placeholder="Ask Gallifrey anything..."
-                  className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 pl-5 pr-14 text-xs focus:outline-none focus:border-primary/50 group-hover:border-white/20 transition-all placeholder:text-white/20 tracking-wide"
+                  className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 pl-5 pr-14 text-xs focus:outline-none focus:border-primary/50 group-hover:border-white/20 transition-all placeholder:text-white/20 tracking-wide disabled:opacity-60"
+                  disabled={isTyping}
                 />
                 <button 
                   onClick={() => handleSend()}
-                  className="absolute right-2 top-2 p-2.5 bg-primary text-primary-foreground rounded-xl hover:shadow-[0_0_20px_rgba(0,242,255,0.4)] transition-all active:scale-95"
+                  disabled={isTyping}
+                  className="absolute right-2 top-2 p-2.5 bg-primary text-primary-foreground rounded-xl hover:shadow-[0_0_20px_rgba(0,242,255,0.4)] transition-all active:scale-95 disabled:opacity-50"
                 >
                   <Send className="w-4 h-4" />
                 </button>
               </div>
+              {metadata?.feature_columns?.length ? (
+                <p className="mt-3 text-[10px] uppercase tracking-widest text-white/40 font-semibold">
+                  Model Context: {metadata.feature_columns.length} features loaded
+                </p>
+              ) : null}
             </div>
           </motion.div>
         )}

@@ -28,4 +28,6 @@ dependencies = [
     "streamlit>=1.55.0",
     "python-multipart>=0.0.22",
     "langchain-chroma>=1.1.0",
+    "prometheus-client>=0.24.1",
+    "reportlab>=4.4.4",
 ]

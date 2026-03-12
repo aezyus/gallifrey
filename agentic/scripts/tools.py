@@ -7,6 +7,8 @@ from langchain_chroma import Chroma
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_core.tools import tool
 
+from scripts.reporting import generate_structure_report_pdf
+
 
 # ------------------------
 # Embedding Model (PDF RAG)
@@ -171,3 +173,29 @@ def summarize_gallifrey_metrics() -> str:
             lines.append(f"- {ep}: {int(total)} requests")
 
     return "\n".join(lines)
+
+
+@tool
+def generate_structure_pdf_report(
+    structure_id: int,
+    structure_name: str,
+    structure_type: str,
+    location: str,
+    sensors: List[Dict[str, Any]],
+    telemetry_summary: Dict[str, Any] | None = None,
+) -> str:
+    """
+    Generate a downloadable PDF report for a structure using current sensor metadata
+    and telemetry summary values.
+    """
+    path = generate_structure_report_pdf(
+        {
+            "structure_id": structure_id,
+            "structure_name": structure_name,
+            "structure_type": structure_type,
+            "location": location,
+            "sensors": sensors,
+            "telemetry_summary": telemetry_summary or {},
+        }
+    )
+    return f"Generated structure PDF report at: {path}"

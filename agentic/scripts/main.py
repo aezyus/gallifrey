@@ -1,8 +1,8 @@
-import time
-
 from fastapi import FastAPI, Response
-from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_latest
+from fastapi.middleware.cors import CORSMiddleware
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
+from scripts.metrics import REQUEST_COUNT, REQUEST_LATENCY
 from scripts.routes import router
 
 
@@ -11,17 +11,20 @@ app = FastAPI(
     version="1.0",
 )
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:3001",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 app.include_router(router)
-
-
-REQUEST_COUNT = Counter(
-    "agentic_requests_total", "Request count for Agentic AI API", ["endpoint"]
-)
-REQUEST_LATENCY = Histogram(
-    "agentic_request_latency_seconds",
-    "Request latency in seconds for Agentic AI API",
-    ["endpoint"],
-)
 
 
 @app.get("/")

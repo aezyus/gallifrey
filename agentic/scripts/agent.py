@@ -8,6 +8,7 @@ from scripts.tools import (
     run_risk_shi_on_features,
     run_lstm_pof_on_sequence,
     summarize_gallifrey_metrics,
+    generate_structure_pdf_report,
 )
 
 
@@ -33,6 +34,7 @@ def build_agent():
         run_risk_shi_on_features,
         run_lstm_pof_on_sequence,
         summarize_gallifrey_metrics,
+        generate_structure_pdf_report,
     ]
 
     system_prompt = """
@@ -52,6 +54,8 @@ You have access to:
   time-ordered sequence of fused features.
 - summarize_gallifrey_metrics: summarize API request counts and latencies from
   Prometheus metrics.
+- generate_structure_pdf_report: generate a PDF report artifact for a selected
+  structure with latest telemetry summary and connected sensors.
 
 Guidelines:
 - When the user asks about "why" a structure is risky, call the ML tools

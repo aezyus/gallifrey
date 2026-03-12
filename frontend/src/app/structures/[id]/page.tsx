@@ -1,29 +1,138 @@
 "use client";
 
-import { WaveletScalogram } from "@/components/WaveletScalogram";
 import { StatsCard } from "@/components/StatsCard";
-import { DigitalTwin } from "@/components/DigitalTwin";
 import { 
-  History, Info, Waves, Activity, AlertTriangle, Zap, ArrowLeft
+  History, Info, Waves, Activity, Zap, ArrowLeft, PlusCircle, FileDown
 } from "lucide-react";
 import Link from "next/link";
-import { motion } from "framer-motion";
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts';
 
-const mockHistoricalHealth = [
-  { day: 'Mon', health: 94 },
-  { day: 'Tue', health: 93 },
-  { day: 'Wed', health: 95 },
-  { day: 'Thu', health: 88 },
-  { day: 'Fri', health: 92 },
-  { day: 'Sat', health: 91 },
-  { day: 'Sun', health: 92 },
-];
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useParams } from "next/navigation";
+import { gallifreyApi, SensorRecord, StructureRecord } from "@/lib/api";
+import { useAnomalySocket } from "@/hooks/useAnomalySocket";
+import { cn } from "@/lib/utils";
 
-export default function StructureDetail({ params }: { params: { id: string } }) {
-  const structureName = params.id.toUpperCase().replace('-', ' ');
+export default function StructureDetail() {
+  const params = useParams<{ id: string }>();
+  const structureId = Number(params.id);
+  const [structure, setStructure] = useState<StructureRecord | null>(null);
+  const [sensors, setSensors] = useState<SensorRecord[]>([]);
+  const [history, setHistory] = useState<{ time: string; health: number }[]>([]);
+  const [currentVibration, setCurrentVibration] = useState("0.24");
+  const [sensorName, setSensorName] = useState("");
+  const [sensorType, setSensorType] = useState("strain_gauge");
+  const [busy, setBusy] = useState(false);
+
+  const { lastResponse, isConnected } = useAnomalySocket({
+    autoTelemetry: true,
+    intervalMs: 1100,
+    sampleCount: Math.max(1, sensors.length),
+    featureCount: 8,
+  });
+
+  const healthStatus = useMemo(() => {
+    const latest = history[history.length - 1]?.health ?? 92;
+    return latest > 82 ? "Normal" : latest > 56 ? "Warning" : "Critical";
+  }, [history]);
+
+  const loadStructureData = useCallback(async () => {
+    if (!Number.isFinite(structureId)) return;
+    try {
+      const [structurePayload, sensorPayload] = await Promise.all([
+        gallifreyApi.getStructure(structureId),
+        gallifreyApi.listSensors(structureId),
+      ]);
+      setStructure(structurePayload);
+      setSensors(sensorPayload);
+    } catch (error) {
+      console.error("Failed loading structure", error);
+    }
+  }, [structureId]);
+
+  useEffect(() => {
+    loadStructureData();
+  }, [loadStructureData]);
+
+  useEffect(() => {
+    if (!lastResponse) return;
+
+    const ifScore = Math.abs(lastResponse.isolation_forest_score?.[0] ?? 0);
+    const recon = lastResponse.reconstruction_error?.[0] ?? 0;
+    const vibration = Math.max(0.08, Math.min(0.9, 0.18 + ifScore * 2 + recon * 10));
+    const health = Math.max(20, Math.min(99, 96 - ifScore * 120 - recon * 600));
+
+    setCurrentVibration(vibration.toFixed(2));
+    setHistory((prev) => {
+      const next = [
+        ...prev,
+        {
+          time: new Date().toLocaleTimeString([], {
+            hour12: false,
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+          }),
+          health: Number(health.toFixed(2)),
+        },
+      ];
+      if (next.length > 40) next.shift();
+      return next;
+    });
+  }, [lastResponse]);
+
+  const handleAddSensor = async () => {
+    if (!sensorName.trim() || !structure) return;
+    setBusy(true);
+    try {
+      await gallifreyApi.connectSensor(structure.id, {
+        name: sensorName.trim(),
+        type: sensorType,
+        x: Number((Math.random() * 8 - 4).toFixed(2)),
+        y: Number((Math.random() * 4 + 1).toFixed(2)),
+        z: Number((Math.random() * 2 - 1).toFixed(2)),
+        stream_url: "mock://sensor-feed",
+        connected: true,
+      });
+      setSensorName("");
+      await loadStructureData();
+    } catch (error) {
+      console.error("Failed to add sensor", error);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleGeneratePdf = async () => {
+    if (!structure) return;
+    setBusy(true);
+    try {
+      const latestHealth = history[history.length - 1]?.health ?? 92;
+      await gallifreyApi.generateStructureReportPdf({
+        structure_id: structure.id,
+        structure_name: structure.name,
+        structure_type: structure.type,
+        location: structure.location,
+        sensors,
+        telemetry_summary: {
+          latest_health: Number(latestHealth.toFixed(2)),
+          current_vibration_g: Number(currentVibration),
+          websocket_connected: isConnected,
+          sensor_count: sensors.length,
+        },
+      });
+    } catch (error) {
+      console.error("Failed to generate PDF", error);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!structure) {
+    return <div className="space-y-8 pb-12"><p className="text-sm text-muted-foreground">Loading structure...</p></div>;
+  }
 
   return (
     <div className="space-y-8 pb-12">
@@ -35,17 +144,24 @@ export default function StructureDetail({ params }: { params: { id: string } }) 
           <nav className="flex items-center gap-2 text-xs text-muted-foreground uppercase font-bold tracking-widest mb-1">
             <Link href="/structures" className="hover:text-primary transition-colors">Structures</Link>
             <span>/</span>
-            <span className="text-foreground">{params.id}</span>
+            <span className="text-foreground">{structure.id}</span>
           </nav>
-          <h1 className="text-4xl font-bold tracking-tight">{structureName}</h1>
+          <h1 className="text-4xl font-bold tracking-tight">{structure.name.toUpperCase()}</h1>
         </div>
         
         <div className="ml-auto flex gap-3">
-          <div className="px-4 py-2 bg-emerald-500/10 border border-emerald-500/30 rounded-full text-xs font-bold text-emerald-500 flex items-center gap-2 uppercase tracking-widest">
-            <div className="w-2 h-2 bg-emerald-500 rounded-full" /> Normal
+          <div className={cn(
+            "px-4 py-2 border rounded-full text-xs font-bold flex items-center gap-2 uppercase tracking-widest",
+            healthStatus === "Normal"
+              ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-500"
+              : healthStatus === "Warning"
+                ? "bg-yellow-500/10 border-yellow-500/30 text-yellow-400"
+                : "bg-red-500/10 border-red-500/30 text-red-500"
+          )}>
+            <div className={cn("w-2 h-2 rounded-full", healthStatus === "Normal" ? "bg-emerald-500" : healthStatus === "Warning" ? "bg-yellow-400" : "bg-red-500")} /> {healthStatus}
           </div>
           <div className="px-4 py-2 bg-primary/10 border border-primary/30 rounded-full text-xs font-bold text-primary flex items-center gap-2 uppercase tracking-widest">
-            Digital Twin Synchronized
+            {isConnected ? "Digital Twin Synchronized" : "Twin Sync Pending"}
           </div>
         </div>
       </header>
@@ -56,19 +172,62 @@ export default function StructureDetail({ params }: { params: { id: string } }) 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <StatsCard 
               title="Vibration (RMS)" 
-              value="0.24g" 
+              value={`${currentVibration}g`}
               description="Delta from baseline: +2%" 
               icon={Activity} 
             />
             <StatsCard 
               title="Deterioration Rate" 
-              value="0.05%" 
-              description="Monthly SHI decay" 
+              value={`${history.length > 1 ? Math.max(0.01, (history[0].health - history[history.length - 1].health) / Math.max(1, history.length)).toFixed(2) : "0.05"}%`} 
+              description="Live SHI drift per sample window" 
               icon={Zap} 
             />
           </div>
 
-          <DigitalTwin />
+          <div className="glass-card rounded-2xl p-6 border-white/10">
+            <h3 className="text-sm font-bold uppercase tracking-widest text-muted-foreground mb-4">Sensor Connections</h3>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+              <input
+                value={sensorName}
+                onChange={(e) => setSensorName(e.target.value)}
+                placeholder="Sensor name"
+                className="rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-sm"
+              />
+              <select
+                value={sensorType}
+                onChange={(e) => setSensorType(e.target.value)}
+                className="rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-sm"
+              >
+                <option value="strain_gauge">Strain Gauge</option>
+                <option value="accelerometer">Accelerometer</option>
+                <option value="temperature">Temperature</option>
+                <option value="displacement">Displacement</option>
+                <option value="pressure">Pressure</option>
+              </select>
+              <button
+                onClick={handleAddSensor}
+                disabled={busy}
+                className="rounded-lg bg-primary/10 border border-primary/30 px-3 py-2 text-xs font-bold uppercase tracking-widest text-primary disabled:opacity-50"
+              >
+                <PlusCircle className="inline w-4 h-4 mr-1" /> Connect Sensor
+              </button>
+              <button
+                onClick={handleGeneratePdf}
+                disabled={busy}
+                className="rounded-lg bg-white/5 border border-white/15 px-3 py-2 text-xs font-bold uppercase tracking-widest hover:bg-white/10 disabled:opacity-50"
+              >
+                <FileDown className="inline w-4 h-4 mr-1" /> AI PDF Report
+              </button>
+            </div>
+            <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-2">
+              {sensors.map((sensor) => (
+                <div key={sensor.id} className="text-xs p-2 rounded-lg bg-white/5 border border-white/10 flex justify-between">
+                  <span>{sensor.name} ({sensor.type})</span>
+                  <span className={sensor.connected ? "text-emerald-400" : "text-red-400"}>{sensor.connected ? "connected" : "offline"}</span>
+                </div>
+              ))}
+            </div>
+          </div>
 
           <div className="glass-card p-8 rounded-2xl relative">
             <div className="flex justify-between items-center mb-10">
@@ -85,14 +244,14 @@ export default function StructureDetail({ params }: { params: { id: string } }) 
 
             <div className="h-[300px]">
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={mockHistoricalHealth}>
+                <LineChart data={history}>
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
-                  <XAxis dataKey="day" stroke="rgba(255,255,255,0.3)" fontSize={12} tickLine={false} axisLine={false} />
-                  <YAxis domain={[80, 100]} stroke="rgba(255,255,255,0.3)" fontSize={12} tickLine={false} axisLine={false} />
+                  <XAxis dataKey="time" stroke="rgba(255,255,255,0.3)" fontSize={10} tickLine={false} axisLine={false} />
+                  <YAxis domain={[20, 100]} stroke="rgba(255,255,255,0.3)" fontSize={12} tickLine={false} axisLine={false} />
                   <Tooltip 
                     contentStyle={{ backgroundColor: '#0a0b10', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px' }}
                   />
-                  <Line type="stepAfter" dataKey="health" stroke="var(--primary)" strokeWidth={3} dot={{ fill: 'var(--primary)', r: 4 }} />
+                  <Line type="monotone" dataKey="health" stroke="var(--primary)" strokeWidth={3} dot={false} />
                 </LineChart>
               </ResponsiveContainer>
             </div>
@@ -104,11 +263,10 @@ export default function StructureDetail({ params }: { params: { id: string } }) 
           <div className="glass-card p-6 rounded-2xl">
             <h3 className="text-sm font-bold flex items-center gap-2 uppercase tracking-widest text-muted-foreground mb-6">
               <Waves className="w-4 h-4" />
-              Spectral Analysis
+              Live Telemetry Context
             </h3>
-            <WaveletScalogram />
             <p className="text-[10px] text-muted-foreground mt-4 leading-relaxed">
-              Real-time CWT decomposition showing structural resonant frequencies. Anomalous energy spikes in the 20-30Hz band indicate local joint flex.
+              Structure type: {structure.type}. Location: {structure.location}. Active sensors: {sensors.length}. Telemetry stream feeds anomaly + SHI overlays in real time.
             </p>
           </div>
 

@@ -1,38 +1,94 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { StatsCard } from "@/components/StatsCard";
-import { Activity, ShieldAlert, Boxes, Waves, Thermometer, Zap, ArrowRight } from "lucide-react";
+import { Activity, ShieldAlert, Boxes, Waves, Zap, ArrowRight } from "lucide-react";
 import { 
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts';
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
+import { useAnomalySocket } from "@/hooks/useAnomalySocket";
 
-const mockPerformanceData = [
-  { time: '00:00', strain: 45, vibration: 0.12 },
-  { time: '04:00', strain: 52, vibration: 0.15 },
-  { time: '08:00', strain: 85, vibration: 0.45 },
-  { time: '12:00', strain: 92, vibration: 0.52 },
-  { time: '16:00', strain: 78, vibration: 0.38 },
-  { time: '20:00', strain: 58, vibration: 0.22 },
-  { time: '23:59', strain: 48, vibration: 0.14 },
-];
-
-const mockStructureHealth = [
-  { id: 'bridge-a4', name: 'Bridge-A4 (Main)', health: 92, status: 'Safe' },
-  { id: 'west-arch', name: 'West-Arch-Span', health: 85, status: 'Safe' },
-  { id: 'north-pillar', name: 'North-Support-Pillar', health: 42, status: 'Critical' },
-  { id: 'east-extension', name: 'East-Extension', health: 65, status: 'Warning' },
-];
+interface StructureHealth {
+  id: string;
+  name: string;
+  health: number;
+  status: "Safe" | "Warning" | "Critical";
+}
 
 export default function Dashboard() {
+  const { isConnected, lastResponse } = useAnomalySocket({
+    autoTelemetry: true,
+    intervalMs: 1000,
+    sampleCount: 5,
+    featureCount: 8,
+  });
+
+  const [performanceData, setPerformanceData] = useState([
+    { time: '00:00:00', strain: 48, vibration: 0.16 },
+    { time: '00:00:03', strain: 52, vibration: 0.19 },
+    { time: '00:00:06', strain: 50, vibration: 0.17 },
+  ]);
+  const [structures, setStructures] = useState<StructureHealth[]>([
+    { id: 'bridge-a4', name: 'Bridge-A4 (Main)', health: 92, status: 'Safe' },
+    { id: 'west-arch', name: 'West-Arch-Span', health: 88, status: 'Safe' },
+    { id: 'north-pillar', name: 'North-Support-Pillar', health: 74, status: 'Warning' },
+    { id: 'east-extension', name: 'East-Extension', health: 81, status: 'Safe' },
+  ]);
+  const [recentAnomalies, setRecentAnomalies] = useState(0);
+
+  useEffect(() => {
+    if (!lastResponse) return;
+
+    const anomalyCount = lastResponse.is_anomaly.filter(Boolean).length;
+    const avgIso =
+      lastResponse.isolation_forest_score.reduce((acc, val) => acc + Math.abs(val), 0) /
+      Math.max(1, lastResponse.isolation_forest_score.length);
+    const reconAvg =
+      (lastResponse.reconstruction_error?.reduce((acc, val) => acc + val, 0) ?? 0) /
+      Math.max(1, lastResponse.reconstruction_error?.length ?? 1);
+
+    const strain = Math.min(100, Math.max(25, 40 + avgIso * 130 + anomalyCount * 8));
+    const vibration = Math.min(1, Math.max(0.08, 0.1 + reconAvg * 8));
+
+    setPerformanceData((prev) => {
+      const next = [
+        ...prev,
+        {
+          time: new Date().toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+          strain: Number(strain.toFixed(2)),
+          vibration: Number(vibration.toFixed(3)),
+        },
+      ];
+      if (next.length > 28) next.shift();
+      return next;
+    });
+
+    setRecentAnomalies((prev) => Math.min(999, prev + anomalyCount));
+
+    setStructures((prev) =>
+      prev.map((item, idx) => {
+        const pressure = lastResponse.is_anomaly[idx] ? 8 : 1.5;
+        const scorePenalty = Math.max(0, (Math.abs(lastResponse.isolation_forest_score[idx] ?? 0) - 0.02) * 80);
+        const drift = pressure + scorePenalty;
+        const nextHealth = Math.max(18, Math.min(99, item.health - drift * 0.18 + Math.random() * 0.9));
+        const status: StructureHealth["status"] = nextHealth > 82 ? "Safe" : nextHealth > 58 ? "Warning" : "Critical";
+        return { ...item, health: Number(nextHealth.toFixed(1)), status };
+      }),
+    );
+  }, [lastResponse]);
+
+  const fleetSHI = (structures.reduce((acc, current) => acc + current.health, 0) / structures.length).toFixed(1);
+
   return (
     <div className="space-y-8 animate-in fade-in duration-500 pb-12">
       <header className="flex justify-between items-end">
         <div>
           <nav className="flex items-center gap-2 text-[10px] text-primary uppercase font-bold tracking-widest mb-1">
-             <div className="w-2 h-2 rounded-full bg-primary animate-pulse" /> Live Fleet Analytics
+             <div className={cn("w-2 h-2 rounded-full", isConnected ? "bg-emerald-400 animate-pulse" : "bg-red-400")} />
+             {isConnected ? "Live Fleet Analytics" : "Telemetry Reconnecting"}
           </nav>
           <h2 className="text-4xl font-black tracking-tight text-white uppercase italic">Fleet Intelligence</h2>
           <p className="text-muted-foreground mt-1">Real-time aggregate analysis across distributed SHM nodes.</p>
@@ -40,7 +96,7 @@ export default function Dashboard() {
         <div className="hidden md:flex gap-4">
           <div className="text-right p-4 glass-card rounded-2xl border-primary/20 bg-primary/5">
             <p className="text-[10px] text-muted-foreground font-black uppercase tracking-widest leading-none mb-1">Global SHI</p>
-            <p className="text-3xl font-black text-primary italic leading-none">84.2%</p>
+            <p className="text-3xl font-black text-primary italic leading-none">{fleetSHI}%</p>
           </div>
         </div>
       </header>
@@ -48,16 +104,16 @@ export default function Dashboard() {
       <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatsCard 
           title="Active Sensors" 
-          value="1,242" 
-          description="99.8% Connectivity" 
+          value={isConnected ? "1,242" : "1,187"} 
+          description={isConnected ? "99.8% Connectivity" : "96.2% Connectivity"} 
           icon={Activity} 
           variant="safe"
         />
         <StatsCard 
           title="Risk Anomalies" 
-          value="12" 
-          description="Detected in last 24h" 
-          trend={15}
+          value={String(recentAnomalies)} 
+          description="Detected from live telemetry stream" 
+          trend={recentAnomalies > 0 ? 15 : 0}
           icon={ShieldAlert} 
           variant="warning"
         />
@@ -69,7 +125,7 @@ export default function Dashboard() {
         />
         <StatsCard 
           title="Avg PoF" 
-          value="2.4%" 
+          value={`${Math.max(0.3, Number((recentAnomalies / 60).toFixed(1)))}%`} 
           description="Prob. of Failure (Fleet Avg)" 
           icon={Zap} 
           variant="safe"
@@ -99,7 +155,7 @@ export default function Dashboard() {
           
           <div className="h-[350px] w-full relative z-10">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={mockPerformanceData}>
+              <AreaChart data={performanceData}>
                 <defs>
                   <linearGradient id="colorStrain" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="var(--primary)" stopOpacity={0.4}/>
@@ -139,7 +195,7 @@ export default function Dashboard() {
              Health Status
           </h3>
           <div className="space-y-8 flex-1">
-            {mockStructureHealth.map((item, idx) => (
+            {structures.map((item, idx) => (
               <Link key={idx} href={`/structures/${item.id}`} className="block group">
                 <div className="space-y-3">
                   <div className="flex justify-between items-center">
