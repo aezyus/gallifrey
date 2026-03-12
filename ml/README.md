@@ -6,7 +6,12 @@
 
 ## 3. Data cleaning & Preprocessing
 
-FFT & Wavelet Transforms
+- FFT & Wavelet Transforms (Implemented in `ml/algos/wavelet_transform`)
+  - Littlewood-Paley Wavelet Transform
+  - Local Power Spectra (LPS)
+  - Structural Response (Duhamel Integral)
+  - Evolutionary PSD
+  - First Passage Reliability Analysis
 
 ## 4. Exploratory Data Analysis (EDA)
 
