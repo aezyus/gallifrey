@@ -341,10 +341,17 @@ app.add_middleware(
 )
 
 # Prometheus metrics
-REQUEST_COUNT = Counter("gallifrey_requests_total", "Request count", ["endpoint"])
-REQUEST_LATENCY = Histogram(
-    "gallifrey_request_latency_seconds", "Request latency in seconds", ["endpoint"]
-)
+from prometheus_client import REGISTRY
+
+def get_metric(metric_type, name, description, labels):
+    # Check if the metric is already in the registry to avoid re-registration errors during reload
+    if name in REGISTRY._names_to_collectors:
+        return REGISTRY._names_to_collectors[name]
+    return metric_type(name, description, labels)
+
+# Initialize metrics safely
+REQUEST_COUNT = get_metric(Counter, "gallifrey_requests_total", "Request count", ["endpoint"])
+REQUEST_LATENCY = get_metric(Histogram, "gallifrey_request_latency_seconds", "Request latency in seconds", ["endpoint"])
 
 
 @app.on_event("startup")
