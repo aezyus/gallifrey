@@ -5,12 +5,13 @@ description = "ML workflow for the project."
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 dependencies = [
+    "fastapi>=0.115.0",
     "ipykernel>=7.2.0",
     "jupyter>=1.1.1",
     "matplotlib>=3.10.8",
     "numpy>=2.4.3",
     "optuna>=4.7.0",
-    "pandas>=3.0.1",
+    "pandas>=1.5.0,<3.0.0",
     "plotly>=6.6.0",
     "pywavelets>=1.9.0",
     "scikit-learn>=1.8.0",
@@ -22,6 +23,10 @@ dependencies = [
     "torchmetrics>=1.9.0",
     "tqdm>=4.67.3",
     "nbconvert[webpdf]>=7.17.0",
+    "uvicorn[standard]>=0.34.0",
+    "websockets>=13.0.0",
+    "httpx>=0.28.0",
+    "streamlit>=1.41.0",
 ]
 
 [[tool.uv.index]]
