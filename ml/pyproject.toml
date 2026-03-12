@@ -24,6 +24,7 @@ dependencies = [
     "tqdm>=4.67.3",
     "nbconvert[webpdf]>=7.17.0",
     "uvicorn[standard]>=0.34.0",
+    "websockets>=13.0.0",
 ]
 
 [[tool.uv.index]]

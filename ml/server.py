@@ -3,10 +3,11 @@ from typing import List, Optional
 
 import numpy as np
 import torch
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field, validator
 
 import pickle
+import joblib
 
 
 MODELS_DIR = Path(__file__).resolve().parent / "data" / "models"
@@ -47,18 +48,27 @@ class ModelBundle:
         path = MODELS_DIR / filename
         if not path.exists():
             return None
-        with path.open("rb") as f:
-            return pickle.load(f)
+        # Many sklearn objects are saved via joblib; prefer that and fall back to pickle.
+        try:
+            return joblib.load(path)
+        except Exception:
+            with path.open("rb") as f:
+                return pickle.load(f)
 
     def _load_torch_model(self, filename: str):
         path = MODELS_DIR / filename
         if not path.exists():
             return None
-        # Assumes the whole model object was saved via torch.save(model, path)
         device = torch.device("cpu")
-        model = torch.load(path, map_location=device)
-        model.eval()
-        return model
+        obj = torch.load(path, map_location=device)
+        # If a full model was saved, it will be a nn.Module and have eval().
+        # If only a state_dict was saved (OrderedDict), we currently skip it
+        # because the architecture definition is not available here.
+        if hasattr(obj, "eval"):
+            obj.eval()
+            return obj
+        # Unsupported format (likely state_dict); ignore autoencoder for now.
+        return None
 
     def _load_models(self) -> None:
         self.scaler = self._load_pickle("scaler_anomaly.pkl")
@@ -142,6 +152,36 @@ def anomaly_inference(request: AnomalyRequest) -> AnomalyResponse:
         return model_bundle.predict(X)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Inference failed: {exc}") from exc
+
+
+@app.websocket("/ws/anomaly")
+async def anomaly_websocket(websocket: WebSocket) -> None:
+    """
+    WebSocket endpoint for streaming anomaly inference.
+
+    Protocol:
+      - Client sends JSON messages of the form:
+          {"samples": [[...], [...], ...]}
+      - Server responds with JSON-encoded AnomalyResponse for each message.
+    """
+    await websocket.accept()
+    if "model_bundle" not in globals():
+        await websocket.close(code=1011)
+        return
+
+    try:
+        while True:
+            data = await websocket.receive_json()
+            try:
+                request = AnomalyRequest(**data)
+                X = np.array(request.samples, dtype=np.float32)
+                response = model_bundle.predict(X)
+                await websocket.send_json(response.model_dump())
+            except Exception as exc:
+                await websocket.send_json({"error": f"Inference failed: {exc}"})
+    except WebSocketDisconnect:
+        # Client disconnected; just exit the loop
+        return
 
 
 if __name__ == "__main__":

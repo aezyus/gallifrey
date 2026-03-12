@@ -1,0 +1,24 @@
+version: "3.9"
+
+services:
+  ml-api:
+    build:
+      context: ../ml
+    image: gallifrey-ml-api
+    container_name: gallifrey-ml-api
+    ports:
+      - "8000:8000"
+    volumes:
+      - ../ml/data/models:/app/data/models:ro
+      - ../ml/data:/app/data:ro
+
+  ml-mock:
+    build:
+      context: ../ml/mock
+    image: gallifrey-ml-mock
+    container_name: gallifrey-ml-mock
+    depends_on:
+      - ml-api
+    environment:
+      - MOCK_SERVER_URL=ws://ml-api:8000/ws/anomaly
+
