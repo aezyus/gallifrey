@@ -21,6 +21,7 @@ dependencies = [
     "torch",
     "torchmetrics>=1.9.0",
     "tqdm>=4.67.3",
+    "nbconvert[webpdf]>=7.17.0",
 ]
 
 [[tool.uv.index]]
