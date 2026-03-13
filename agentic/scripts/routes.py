@@ -79,11 +79,20 @@ async def chat_endpoint(req: ChatRequest):
 
     if hasattr(last_message, "content"):
         reply = last_message.content
+        if isinstance(reply, list):
+            # Handle list of content parts (e.g. from some multimodal models)
+            text_parts = []
+            for part in reply:
+                if isinstance(part, str):
+                    text_parts.append(part)
+                elif isinstance(part, dict) and "text" in part:
+                    text_parts.append(part["text"])
+            reply = "\n".join(text_parts)
     else:
         reply = str(last_message)
 
     REQUEST_LATENCY.labels("chat").observe(time.perf_counter() - start)
-    return {"response": reply}
+    return {"response": str(reply)}
 
 
 @router.post("/reports/structure")

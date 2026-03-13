@@ -24,12 +24,11 @@ def ingest_pdf(file_path: str):
         model_name="sentence-transformers/all-MiniLM-L6-v2"
     )
 
-    # Connect to running Chroma server
+    # Connect to running Chroma local DB
     db = Chroma(
         collection_name=COLLECTION_NAME,
         embedding_function=embeddings,
-        host=CHROMA_HOST,
-        port=CHROMA_PORT
+        persist_directory="./chroma_db"
     )
 
     # Add documents to collection

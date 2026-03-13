@@ -85,8 +85,11 @@ export function AIAssistant() {
                   <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-emerald-500 rounded-full border-4 border-[#0a0b10]" />
                 </div>
                 <div>
-                  <h4 className="text-sm font-black uppercase tracking-tighter">Gallifrey Sentinel</h4>
-                  <p className="text-[10px] text-primary uppercase font-bold tracking-[0.2em] leading-none mt-1">AI Logic Core // Active</p>
+                  <h4 className="text-sm font-black uppercase tracking-tighter flicker">Gallifrey Sentinel</h4>
+                  <div className="flex items-center gap-2">
+                    <p className="text-[10px] text-primary uppercase font-bold tracking-[0.2em] leading-none mt-1">AI Logic Core // Active</p>
+                    <span className="text-[8px] text-white/30 font-mono mt-1 opacity-50">NODE: {Math.random().toString(36).slice(2, 6).toUpperCase()}</span>
+                  </div>
                 </div>
               </div>
               <button onClick={() => setIsOpen(false)} className="p-2 hover:bg-white/10 rounded-xl transition-colors">
@@ -95,7 +98,7 @@ export function AIAssistant() {
             </div>
 
             {/* Chat Area */}
-            <div ref={scrollRef} className="flex-1 overflow-y-auto p-6 space-y-6 scroll-hide bg-black/40">
+            <div ref={scrollRef} className="flex-1 overflow-y-auto p-6 space-y-6 scroll-hide bg-black/40 grid-bg">
               {messages.map((m, i) => (
                 <motion.div 
                   initial={{ opacity: 0, y: 10 }}
@@ -113,12 +116,12 @@ export function AIAssistant() {
                     {m.role === 'user' ? <User className="w-4 h-4 text-primary" /> : <Sparkles className="w-4 h-4 text-primary" />}
                   </div>
                   <div className={cn(
-                    "max-w-[80%] p-4 rounded-3xl text-sm leading-relaxed font-medium shadow-sm",
+                    "max-w-[80%] p-4 rounded-3xl text-sm leading-relaxed font-medium shadow-sm hud-border",
                     m.role === 'user' 
-                      ? "bg-primary text-primary-foreground rounded-tr-none" 
+                      ? "bg-primary/80 text-primary-foreground rounded-tr-none" 
                       : "bg-white/[0.03] text-white/90 rounded-tl-none border border-white/10"
                   )}>
-                    {m.content}
+                    {typeof m.content === 'string' ? m.content : (m.content as any)?.text || JSON.stringify(m.content)}
                   </div>
                 </motion.div>
               ))}
@@ -132,11 +135,16 @@ export function AIAssistant() {
                   <div className="p-2.5 rounded-xl shrink-0 mt-1 shadow-[0_0_15px_rgba(0,242,255,0.1)] bg-white/5 border border-white/5">
                     <Sparkles className="w-4 h-4 text-primary" />
                   </div>
-                  <div className="max-w-[80%] p-4 rounded-3xl rounded-tl-none text-sm leading-relaxed font-medium shadow-sm bg-white/[0.03] text-white/90 border border-white/10">
+                  <div className="max-w-[80%] p-4 rounded-3xl rounded-tl-none text-sm leading-relaxed font-medium shadow-sm bg-white/[0.03] text-white/90 border border-white/10 overflow-hidden">
                     <div className="flex gap-1 items-center h-4 px-2">
-                      <motion.div animate={{ y: [0, -3, 0] }} transition={{ repeat: Infinity, duration: 0.6, delay: 0 }} className="w-1.5 h-1.5 bg-white/40 rounded-full" />
-                      <motion.div animate={{ y: [0, -3, 0] }} transition={{ repeat: Infinity, duration: 0.6, delay: 0.2 }} className="w-1.5 h-1.5 bg-white/40 rounded-full" />
-                      <motion.div animate={{ y: [0, -3, 0] }} transition={{ repeat: Infinity, duration: 0.6, delay: 0.4 }} className="w-1.5 h-1.5 bg-white/40 rounded-full" />
+                       {[...Array(5)].map((_, i) => (
+                         <motion.div 
+                           key={i}
+                           animate={{ height: [8, 16, 8] }} 
+                           transition={{ repeat: Infinity, duration: 0.6, delay: i * 0.1 }} 
+                           className="w-1 bg-primary rounded-full opacity-60" 
+                         />
+                       ))}
                     </div>
                   </div>
                 </motion.div>

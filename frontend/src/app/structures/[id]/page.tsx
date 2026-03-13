@@ -14,6 +14,7 @@ import { useParams } from "next/navigation";
 import { gallifreyApi, SensorRecord, StructureRecord } from "@/lib/api";
 import { useAnomalySocket } from "@/hooks/useAnomalySocket";
 import { cn } from "@/lib/utils";
+import { DigitalTwin3D } from "@/components/Bridge3D";
 
 export default function StructureDetail() {
   const params = useParams<{ id: string }>();
@@ -184,53 +185,34 @@ export default function StructureDetail() {
             />
           </div>
 
-          <div className="glass-card rounded-2xl p-6 border-white/10">
-            <h3 className="text-sm font-bold uppercase tracking-widest text-muted-foreground mb-4">Sensor Connections</h3>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-              <input
-                value={sensorName}
-                onChange={(e) => setSensorName(e.target.value)}
-                placeholder="Sensor name"
-                className="rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-sm"
-              />
-              <select
-                value={sensorType}
-                onChange={(e) => setSensorType(e.target.value)}
-                className="rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-sm"
-              >
-                <option value="strain_gauge">Strain Gauge</option>
-                <option value="accelerometer">Accelerometer</option>
-                <option value="temperature">Temperature</option>
-                <option value="displacement">Displacement</option>
-                <option value="pressure">Pressure</option>
-              </select>
-              <button
-                onClick={handleAddSensor}
-                disabled={busy}
-                className="rounded-lg bg-primary/10 border border-primary/30 px-3 py-2 text-xs font-bold uppercase tracking-widest text-primary disabled:opacity-50"
-              >
-                <PlusCircle className="inline w-4 h-4 mr-1" /> Connect Sensor
-              </button>
-              <button
-                onClick={handleGeneratePdf}
-                disabled={busy}
-                className="rounded-lg bg-white/5 border border-white/15 px-3 py-2 text-xs font-bold uppercase tracking-widest hover:bg-white/10 disabled:opacity-50"
-              >
-                <FileDown className="inline w-4 h-4 mr-1" /> AI PDF Report
-              </button>
-            </div>
-            <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-2">
-              {sensors.map((sensor) => (
-                <div key={sensor.id} className="text-xs p-2 rounded-lg bg-white/5 border border-white/10 flex justify-between">
-                  <span>{sensor.name} ({sensor.type})</span>
-                  <span className={sensor.connected ? "text-emerald-400" : "text-red-400"}>{sensor.connected ? "connected" : "offline"}</span>
+          {/* Digital Twin 3D View */}
+          <div className="lg:col-span-3">
+             <div className="mb-6 flex justify-between items-end relative">
+                <div className="scanline opacity-10" />
+                <div>
+                  <h3 className="text-lg font-bold flex items-center gap-3 uppercase tracking-[0.2em] flicker">
+                    <div className="p-2 bg-primary/10 rounded-lg"><Activity className="w-5 h-5 text-primary" /></div>
+                    Digital Twin // Simulation
+                  </h3>
+                  <p className="text-[10px] uppercase font-bold text-white/40 tracking-widest mt-1">Real-time Physics Overlay // {structure.type}</p>
                 </div>
-              ))}
-            </div>
+                <div className="flex gap-2">
+                   <div className="px-3 py-1 bg-white/5 border border-white/10 rounded-lg text-[8px] font-mono text-white/40">Z_COORD: 104.2</div>
+                   <div className="px-3 py-1 bg-white/5 border border-white/10 rounded-lg text-[8px] font-mono text-white/40">BUFF: 0x92f</div>
+                </div>
+             </div>
+             
+             <div className="h-[500px] w-full">
+               <DigitalTwin3D 
+                 isAnomaly={lastResponse?.is_anomaly.some(Boolean)} 
+                 anomalyScore={lastResponse?.isolation_forest_score?.[0] ?? 0}
+               />
+             </div>
           </div>
 
-          <div className="glass-card p-8 rounded-2xl relative">
-            <div className="flex justify-between items-center mb-10">
+          <div className="glass-card p-8 rounded-2xl relative hud-border hud-corner-extra bg-black/40 overflow-hidden">
+            <div className="scanline opacity-5" />
+            <div className="flex justify-between items-center mb-10 relative z-10">
               <h3 className="text-lg font-bold flex items-center gap-2 uppercase tracking-widest text-muted-foreground">
                 <History className="w-5 h-5 text-primary" />
                 SHI History (7 Days)
@@ -242,19 +224,21 @@ export default function StructureDetail() {
               </div>
             </div>
 
-            <div className="h-[300px]">
+            <div className="h-[300px] relative z-10">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={history}>
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
                   <XAxis dataKey="time" stroke="rgba(255,255,255,0.3)" fontSize={10} tickLine={false} axisLine={false} />
                   <YAxis domain={[20, 100]} stroke="rgba(255,255,255,0.3)" fontSize={12} tickLine={false} axisLine={false} />
                   <Tooltip 
-                    contentStyle={{ backgroundColor: '#0a0b10', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px' }}
+                    contentStyle={{ backgroundColor: '#0a0b10', border: '1px solid rgba(0,242,255,0.2)', borderRadius: '12px', backdropFilter: 'blur(10px)' }}
+                    itemStyle={{ color: '#fff', fontSize: '12px' }}
                   />
                   <Line type="monotone" dataKey="health" stroke="var(--primary)" strokeWidth={3} dot={false} />
                 </LineChart>
               </ResponsiveContainer>
             </div>
+            <div className="absolute bottom-4 left-8 text-[8px] font-mono text-white/20">LOG_STREAM: ACTIVE // ERROR_RATE: 0.00%</div>
           </div>
         </div>
 

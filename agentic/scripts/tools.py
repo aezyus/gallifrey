@@ -30,8 +30,7 @@ def get_db():
     return Chroma(
         collection_name=COLLECTION_NAME,
         embedding_function=embeddings,
-        host=CHROMA_HOST,
-        port=CHROMA_PORT,
+        persist_directory="./chroma_db",
     )
 
 
