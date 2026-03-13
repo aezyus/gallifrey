@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AlertTriangle, ShieldAlert, Bell, Filter, Search } from "lucide-react";
+import { AlertTriangle, ShieldAlert, Bell, Search } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { useAnomalySocket } from "@/hooks/useAnomalySocket";
@@ -183,59 +183,73 @@ export default function AlertsPage() {
   };
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500">
-      <header className="flex justify-between items-center text-white">
+    <div className="space-y-6 animate-in fade-in duration-500">
+      {/* Header */}
+      <header className="flex flex-col md:flex-row md:justify-between md:items-end gap-4">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight">System Alerts</h2>
-          <p className="text-muted-foreground mt-1">Real-time incident queue and anomaly triage center.</p>
+          <nav className="flex items-center gap-2 text-[10px] text-primary uppercase font-black tracking-widest mb-1">
+            <div className="w-2 h-2 rounded-full bg-red-400 animate-pulse" />
+            Live Incident Queue
+          </nav>
+          <h2 className="text-fluid-title font-black tracking-tight text-white uppercase">Alert Triage</h2>
+          <p className="text-white/40 mt-1 text-xs uppercase tracking-widest">Real-time anomaly incident management</p>
         </div>
-        <div className="flex items-center gap-4">
-          <button className="p-3 glass-card rounded-xl hover:bg-white/10 transition-colors">
-            <Filter className="w-5 h-5" />
-          </button>
-          <div className="px-6 py-2 bg-red-500/10 border border-red-500/30 rounded-xl text-red-500 font-bold text-xs uppercase tracking-widest flex items-center gap-2">
-            <ShieldAlert className="w-4 h-4" /> {criticalCount} Critical Events
-          </div>
+        <div className="flex items-center gap-3">
+          {criticalCount > 0 && (
+            <div className="pill-crit animate-pulse">
+              <ShieldAlert className="w-3 h-3" /> {criticalCount} critical
+            </div>
+          )}
+          <div className="pill-muted">{groupedAlerts.length} groups</div>
         </div>
       </header>
 
+      {/* Toolbar */}
       <div className="glass-card rounded-2xl overflow-hidden">
-        {/* Search Bar */}
-        <div className="p-4 border-b border-white/5 bg-white/5 flex items-center gap-3">
-          <Search className="w-4 h-4 text-muted-foreground" />
-          <input 
-            type="text" 
-            placeholder="Search alerts by structure, type or ID..." 
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            className="bg-transparent border-none outline-none text-sm w-full placeholder:text-muted-foreground/50"
-          />
-          <div className="flex items-center gap-2 text-[10px] uppercase font-bold tracking-widest">
+        <div className="p-4 border-b border-white/5 flex flex-wrap items-center gap-3">
+          {/* Search */}
+          <div className="flex items-center gap-2 flex-1 min-w-48 bg-white/5 rounded-xl px-3 py-2 border border-white/8">
+            <Search className="w-3.5 h-3.5 text-white/30 flex-shrink-0" />
+            <input
+              type="text"
+              placeholder="Search structure, cause, ID…"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              className="bg-transparent border-none outline-none text-[13px] w-full placeholder:text-white/25"
+            />
+          </div>
+
+          {/* Type filter pills */}
+          <div className="flex items-center gap-1.5">
             {(["all", "critical", "warning", "info"] as const).map((t) => (
               <button
                 key={t}
                 onClick={() => setTypeFilter(t)}
                 className={cn(
-                  "px-2.5 py-1 rounded-md border transition-colors",
+                  "px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all",
                   typeFilter === t
-                    ? "border-primary/40 bg-primary/10 text-primary"
-                    : "border-white/10 text-muted-foreground hover:bg-white/10"
+                    ? t === "critical" ? "bg-red-500/20 text-red-400 border border-red-500/30"
+                      : t === "warning" ? "bg-yellow-500/20 text-yellow-300 border border-yellow-500/30"
+                      : "bg-primary/15 text-primary border border-primary/25"
+                    : "bg-white/5 text-white/35 border border-white/8 hover:bg-white/10 hover:text-white/60"
                 )}
               >
                 {t}
               </button>
             ))}
           </div>
-          <div className="flex items-center gap-2 text-[10px] uppercase font-bold tracking-widest">
+
+          {/* Status filter pills */}
+          <div className="flex items-center gap-1.5">
             {(["all", "pending", "acknowledged", "resolved"] as const).map((state) => (
               <button
                 key={state}
                 onClick={() => setStatusFilter(state)}
                 className={cn(
-                  "px-2.5 py-1 rounded-md border transition-colors",
+                  "px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all",
                   statusFilter === state
-                    ? "border-primary/40 bg-primary/10 text-primary"
-                    : "border-white/10 text-muted-foreground hover:bg-white/10"
+                    ? "bg-primary/15 text-primary border border-primary/25"
+                    : "bg-white/5 text-white/35 border border-white/8 hover:bg-white/10 hover:text-white/60"
                 )}
               >
                 {state}
@@ -244,112 +258,144 @@ export default function AlertsPage() {
           </div>
         </div>
 
-        <div className="px-4 py-3 border-b border-white/5 bg-black/20 flex flex-wrap items-center gap-2">
-          <button
-            onClick={() => applyBatch("acknowledged")}
-            className="px-3 py-1.5 rounded-md border border-primary/25 bg-primary/10 text-[10px] uppercase tracking-widest font-bold text-primary disabled:opacity-40"
-            disabled={!selectedGroups.length}
+        {/* Batch action bar */}
+        {selectedGroups.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            className="px-4 py-2.5 border-b border-white/5 bg-primary/5 flex items-center gap-3"
           >
-            Acknowledge Selected
-          </button>
-          <button
-            onClick={() => applyBatch("resolved")}
-            className="px-3 py-1.5 rounded-md border border-emerald-500/30 bg-emerald-500/10 text-[10px] uppercase tracking-widest font-bold text-emerald-300 disabled:opacity-40"
-            disabled={!selectedGroups.length}
-          >
-            Resolve Selected
-          </button>
-          <span className="text-[10px] uppercase tracking-widest text-white/40">
-            {selectedGroups.length} groups selected
-          </span>
-        </div>
+            <span className="text-[11px] font-black uppercase tracking-wider text-primary">{selectedGroups.length} selected</span>
+            <button
+              onClick={() => applyBatch("acknowledged")}
+              className="px-3 py-1.5 rounded-lg border border-primary/25 bg-primary/10 text-[10px] uppercase tracking-widest font-bold text-primary hover:bg-primary/20 transition-all"
+            >
+              Acknowledge All
+            </button>
+            <button
+              onClick={() => applyBatch("resolved")}
+              className="px-3 py-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 text-[10px] uppercase tracking-widest font-bold text-emerald-300 hover:bg-emerald-500/20 transition-all"
+            >
+              Resolve All
+            </button>
+            <button onClick={() => setSelectedGroups([])} className="ml-auto text-[10px] text-white/30 hover:text-white/60 uppercase tracking-widest">
+              Clear
+            </button>
+          </motion.div>
+        )}
 
-        <div className="divide-y divide-white/5">
+        {/* Alert group rows */}
+        <div className="divide-y divide-white/[0.04]">
           <AnimatePresence>
-            {groupedAlerts.map((group, i) => {
+            {groupedAlerts.length === 0 ? (
+              <div className="py-20 text-center">
+                <Bell className="w-10 h-10 text-white/10 mx-auto mb-3" />
+                <p className="text-white/30 text-sm font-semibold">No alerts match current filters</p>
+              </div>
+            ) : groupedAlerts.map((group, i) => {
               const elapsedMinutes = Math.floor((Date.now() - group.oldestCreatedAt) / 60000);
               const escalation = elapsedMinutes >= 45 && group.status === "pending";
+              const isSelected = selectedGroups.includes(group.key);
 
               return (
-              <motion.div 
-                key={group.key}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.1 }}
-                className={cn(
-                  "p-6 flex items-start gap-6 hover:bg-white/5 transition-colors group",
-                  group.status === 'pending' ? "bg-white/[0.02]" : "",
-                  escalation ? "border-l-2 border-l-yellow-500" : ""
-                )}
-              >
-                <input
-                  type="checkbox"
-                  className="mt-2 h-4 w-4 rounded border-white/20 bg-transparent"
-                  checked={selectedGroups.includes(group.key)}
-                  onChange={() => toggleSelectedGroup(group.key)}
-                />
-                <div className={cn(
-                  "p-3 rounded-xl shrink-0",
-                  group.type === 'critical' ? "bg-red-500/10 text-red-500" : 
-                  group.type === 'warning' ? "bg-yellow-500/10 text-yellow-500" : "bg-emerald-500/10 text-emerald-500"
-                )}>
-                   {group.type === 'critical' ? <ShieldAlert className="w-6 h-6" /> : 
-                    group.type === 'warning' ? <AlertTriangle className="w-6 h-6" /> : <Bell className="w-6 h-6" />}
-                </div>
+                <motion.div
+                  key={group.key}
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: 10 }}
+                  transition={{ delay: Math.min(i * 0.05, 0.3) }}
+                  className={cn(
+                    "flex items-start gap-4 px-5 py-4 transition-all duration-200 group relative",
+                    "hover:bg-white/[0.025]",
+                    isSelected ? "bg-primary/5" : "",
+                    /* left accent by severity */
+                    group.type === "critical" ? "border-l-2 border-l-red-500/70"
+                      : group.type === "warning" ? "border-l-2 border-l-yellow-400/60"
+                      : "border-l-2 border-l-white/10",
+                  )}
+                >
+                  {/* Checkbox */}
+                  <input
+                    type="checkbox"
+                    className="mt-3.5 h-3.5 w-3.5 rounded border-white/20 bg-transparent accent-primary flex-shrink-0 cursor-pointer"
+                    checked={isSelected}
+                    onChange={() => toggleSelectedGroup(group.key)}
+                  />
 
-                <div className="flex-1">
-                  <div className="flex justify-between items-start mb-1">
-                    <h4 className="font-bold text-lg group-hover:text-primary transition-colors">{group.structure}</h4>
-                    <span className="text-xs text-muted-foreground font-mono">{group.latestTime}</span>
+                  {/* Severity icon */}
+                  <div className={cn(
+                    "mt-1 p-2 rounded-xl flex-shrink-0",
+                    group.type === "critical" ? "bg-red-500/10 text-red-400"
+                      : group.type === "warning" ? "bg-yellow-500/10 text-yellow-300"
+                      : "bg-emerald-500/10 text-emerald-400"
+                  )}>
+                    {group.type === "critical" ? <ShieldAlert className="w-4 h-4" /> :
+                      group.type === "warning" ? <AlertTriangle className="w-4 h-4" /> :
+                      <Bell className="w-4 h-4" />}
                   </div>
-                  <p className="text-sm text-muted-foreground max-w-2xl">
-                    {group.rootCause}. {group.count} related events grouped for triage.
-                  </p>
-                  {escalation ? (
-                    <p className="mt-2 text-[10px] uppercase tracking-widest text-yellow-300">
-                      Unacknowledged for {elapsedMinutes}m (Escalation)
-                    </p>
-                  ) : null}
-                  
-                  <div className="flex items-center gap-4 mt-6">
-                    <Link href={`/analytics?structure=${encodeURIComponent(group.structure)}`} className="px-4 py-1.5 rounded-lg border border-white/10 text-[10px] font-bold uppercase tracking-widest hover:bg-white/5 transition-all">
-                      Diagnose
-                    </Link>
-                    <button
-                      onClick={() => applyStatusToGroup(group.key, "acknowledged")}
-                      className="px-4 py-1.5 rounded-lg bg-primary/10 border border-primary/20 text-[10px] font-bold uppercase tracking-widest text-primary hover:bg-primary/20 transition-all"
-                    >
-                      Acknowledge
-                    </button>
-                    <button
-                      onClick={() => applyStatusToGroup(group.key, "resolved")}
-                      className="px-4 py-1.5 rounded-lg border border-emerald-500/30 text-emerald-400 text-[10px] font-bold uppercase tracking-widest hover:bg-emerald-500/10 transition-all"
-                    >
-                      Resolve
-                    </button>
-                  </div>
-                </div>
 
-                <div className="shrink-0 flex flex-col items-end gap-2">
-                   <div className={cn(
-                     "px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest",
-                     group.status === 'pending' ? "bg-red-500 text-white" : "bg-white/10 text-muted-foreground"
-                   )}>
-                     {group.status}
-                   </div>
-                   <div className="text-[10px] font-bold text-white/50">x{group.count}</div>
-                </div>
-              </motion.div>
-            );
+                  {/* Main content */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex flex-wrap items-center gap-2 mb-1">
+                      <span className="font-bold text-[13px] text-white/90 group-hover:text-primary transition-colors">{group.structure}</span>
+                      <span className={cn(
+                        "pill text-[9px]",
+                        group.status === "pending" ? "pill-crit"
+                          : group.status === "acknowledged" ? "pill-warn"
+                          : "pill-safe"
+                      )}>
+                        {group.status}
+                      </span>
+                      {group.count > 1 && (
+                        <span className="pill-muted text-[9px]">×{group.count}</span>
+                      )}
+                      {escalation && (
+                        <span className="pill text-[9px] bg-orange-500/10 text-orange-300 border border-orange-500/20 animate-pulse">
+                          ⚡ Escalated {elapsedMinutes}m
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[12px] text-white/45 leading-snug">{group.rootCause}</p>
+                    <p className="text-[10px] font-mono text-white/20 mt-1">{group.latestTime}</p>
+
+                    {/* Action buttons */}
+                    <div className="flex flex-wrap items-center gap-2 mt-3">
+                      <Link
+                        href={`/analytics?structure=${encodeURIComponent(group.structure)}`}
+                        className="px-3 py-1.5 rounded-lg border border-white/10 text-[10px] font-bold uppercase tracking-wider hover:bg-white/8 hover:text-white transition-all text-white/50"
+                      >
+                        Diagnose →
+                      </Link>
+                      {group.status === "pending" && (
+                        <button
+                          onClick={() => applyStatusToGroup(group.key, "acknowledged")}
+                          className="px-3 py-1.5 rounded-lg bg-primary/8 border border-primary/20 text-[10px] font-bold uppercase tracking-wider text-primary hover:bg-primary/15 transition-all"
+                        >
+                          Acknowledge
+                        </button>
+                      )}
+                      {group.status !== "resolved" && (
+                        <button
+                          onClick={() => applyStatusToGroup(group.key, "resolved")}
+                          className="px-3 py-1.5 rounded-lg border border-emerald-500/25 text-emerald-400 text-[10px] font-bold uppercase tracking-wider hover:bg-emerald-500/10 transition-all"
+                        >
+                          Resolve
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </motion.div>
+              );
             })}
           </AnimatePresence>
         </div>
       </div>
-      
+
+      {/* Clear queue */}
       <div className="flex justify-center">
         <button
           onClick={() => setAlerts([])}
-          className="text-xs font-bold uppercase tracking-widest text-muted-foreground hover:text-primary transition-colors"
+          className="text-[11px] font-bold uppercase tracking-widest text-white/25 hover:text-red-400 transition-colors"
         >
           Clear Volatile Queue
         </button>

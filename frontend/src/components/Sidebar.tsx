@@ -77,81 +77,119 @@ export function Sidebar() {
       >
       <div className="p-8">
         <div className="flex items-center gap-3 mb-10 group">
-          <div className="w-10 h-10 bg-primary/20 rounded-xl flex items-center justify-center border border-primary/40 group-hover:scale-110 transition-transform">
-            <Box className="w-6 h-6 text-primary" />
+          <div className="relative w-10 h-10">
+            <div className="absolute inset-0 bg-primary/20 rounded-xl blur-md opacity-60 group-hover:opacity-100 transition-opacity" />
+            <div className="relative w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center border border-primary/30 group-hover:border-primary/60 transition-colors">
+              <Box className="w-5 h-5 text-primary" />
+            </div>
           </div>
           <div>
-            <h1 className="font-black text-xl tracking-tighter italic text-white">GALLIFREY</h1>
-            <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest leading-none">Intelligence Hub</p>
+            <h1 className="font-black text-xl tracking-[-0.04em] text-transparent bg-clip-text bg-gradient-to-r from-white to-white/70">GALLIFREY</h1>
+            <p className="text-[9px] text-primary/70 uppercase font-bold tracking-[0.2em] leading-none mt-0.5">SHM Platform</p>
           </div>
         </div>
 
-        <nav className="space-y-1">
-          {navItems.map((item) => {
-            const isActive = pathname === item.href;
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={cn(
-                  "group flex items-center gap-4 px-4 py-3 rounded-xl transition-all duration-300 relative",
-                  isActive 
-                    ? "bg-primary/10 text-primary" 
-                    : "text-muted-foreground hover:bg-white/5 hover:text-white"
-                )}
-              >
-                {isActive && (
-                  <motion.div 
-                    layoutId="active-nav"
-                    className="absolute inset-0 bg-primary/5 rounded-xl border border-primary/20"
-                    transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
-                  />
-                )}
-                <item.icon className={cn(
-                  "w-5 h-5 transition-transform group-hover:scale-110 relative z-10",
-                  isActive ? "text-primary" : "text-muted-foreground"
-                )} />
-                <span className="text-sm font-bold relative z-10">{item.name}</span>
-                {isActive && (
-                   <motion.div 
-                    initial={{ scale: 0 }}
-                    animate={{ scale: 1 }}
-                    className="ml-auto w-1.5 h-1.5 bg-primary rounded-full relative z-10" 
-                   />
-                )}
-              </Link>
-            );
-          })}
-        </nav>
+        <div className="mb-3">
+          <p className="text-[9px] font-black uppercase tracking-[0.25em] text-white/20 px-4 mb-2">Navigation</p>
+          <nav className="space-y-0.5">
+            {navItems.map((item) => {
+              const isActive = pathname === item.href;
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={cn(
+                    "group flex items-center gap-3.5 px-4 py-2.5 rounded-xl transition-all duration-200 relative",
+                    isActive
+                      ? "bg-primary/10 text-primary"
+                      : "text-white/40 hover:bg-white/5 hover:text-white/80"
+                  )}
+                >
+                  {isActive && (
+                    <motion.div
+                      layoutId="active-nav"
+                      className="absolute inset-0 bg-primary/5 rounded-xl border border-primary/15"
+                      transition={{ type: "spring", bounce: 0.15, duration: 0.5 }}
+                    />
+                  )}
+                  {/* Left accent bar */}
+                  {isActive && (
+                    <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 bg-primary rounded-r-full" />
+                  )}
+                  <item.icon className={cn(
+                    "w-4 h-4 flex-shrink-0 transition-transform group-hover:scale-110 relative z-10",
+                    isActive ? "text-primary" : "text-white/35 group-hover:text-white/70"
+                  )} />
+                  <span className={cn(
+                    "text-[13px] font-semibold relative z-10 tracking-tight",
+                    isActive ? "text-primary" : ""
+                  )}>{item.name}</span>
+                  {isActive && (
+                    <motion.div
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      className="ml-auto w-1.5 h-1.5 bg-primary rounded-full relative z-10 shadow-[0_0_6px_rgba(0,242,255,0.8)]"
+                    />
+                  )}
+                </Link>
+              );
+            })}
+          </nav>
+        </div>
       </div>
 
-      <div className="mt-auto p-6 space-y-4">
-        {/* Agentic Status Card */}
-        <div className="p-4 bg-white/5 rounded-2xl border border-white/5 relative overflow-hidden group">
-          <div className="absolute inset-0 bg-primary/5 opacity-0 group-hover:opacity-100 transition-opacity" />
-          <div className="relative z-10">
-            <div className="flex items-center gap-2 mb-2">
-              <Bot className={cn("w-4 h-4", coreOnline ? "text-primary animate-pulse" : "text-red-400")} />
-              <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">AI Core Status</span>
+      <div className="mt-auto p-5 space-y-3">
+        {/* Service status rows */}
+        <div className="p-4 bg-black/30 rounded-2xl border border-white/[0.07] space-y-3">
+          <div className="flex items-center gap-2 mb-1">
+            <Bot className={cn("w-3.5 h-3.5", coreOnline ? "text-primary" : "text-red-400")} />
+            <span className="text-[9px] font-black uppercase tracking-[0.2em] text-white/30">System Services</span>
+          </div>
+
+          {/* ML API row */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className={cn(
+                "status-dot flex-shrink-0",
+                mlStatus ? "status-dot-healthy" : "status-dot-critical"
+              )} />
+              <span className="text-[11px] font-semibold text-white/60">ML Inference</span>
             </div>
-            <p className="text-xs font-bold text-white mb-2">{coreOnline ? "Inference + Agentic online" : "Backend degraded"}</p>
-            <div className="h-1 w-full bg-white/10 rounded-full overflow-hidden">
-               <motion.div 
-                animate={{ width: coreOnline ? ["15%", "95%", "45%", "72%"] : ["8%", "12%"] }}
-                transition={{ duration: coreOnline ? 10 : 2, repeat: Infinity }}
-                className={cn("h-full", coreOnline ? "bg-primary" : "bg-red-500")} 
-               />
+            <span className={cn(
+              "text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded",
+              mlStatus ? "text-emerald-400 bg-emerald-500/10" : "text-red-400 bg-red-500/10"
+            )}>{mlStatus ? "online" : "offline"}</span>
+          </div>
+
+          {/* Agentic API row */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className={cn(
+                "status-dot flex-shrink-0",
+                agenticStatus ? "status-dot-healthy" : "status-dot-critical"
+              )} />
+              <span className="text-[11px] font-semibold text-white/60">Agentic LLM</span>
             </div>
-            <div className="mt-2 flex justify-between text-[9px] uppercase tracking-widest text-muted-foreground font-bold">
-              <span className={mlStatus ? "text-emerald-400" : "text-red-400"}>ML API</span>
-              <span className={agenticStatus ? "text-emerald-400" : "text-red-400"}>Agentic API</span>
-            </div>
+            <span className={cn(
+              "text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded",
+              agenticStatus ? "text-emerald-400 bg-emerald-500/10" : "text-red-400 bg-red-500/10"
+            )}>{agenticStatus ? "online" : "offline"}</span>
+          </div>
+
+          {/* Activity bar */}
+          <div className="h-0.5 w-full bg-white/5 rounded-full overflow-hidden mt-1">
+            <motion.div
+              animate={{ width: coreOnline ? ["20%", "90%", "55%", "75%"] : ["5%", "10%"] }}
+              transition={{ duration: coreOnline ? 8 : 2, repeat: Infinity, ease: "easeInOut" }}
+              className={cn("h-full rounded-full", coreOnline ? "bg-primary" : "bg-red-500")}
+            />
           </div>
         </div>
 
-        <div className="flex items-center gap-3 px-4 py-2 opacity-40">
-           <div className="w-2 h-2 bg-emerald-500 rounded-full" />
-           <span className="text-[10px] uppercase font-bold tracking-widest">Network Secure</span>
+        {/* Version / build tag */}
+        <div className="flex items-center justify-between px-1 opacity-30">
+          <span className="text-[9px] uppercase tracking-widest font-bold">GALLIFREY v2.0</span>
+          <span className="text-[9px] font-mono">BUILD_042</span>
         </div>
       </div>
     </aside>

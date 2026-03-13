@@ -216,41 +216,55 @@ export default function Dashboard() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2 }}
-          className="glass-card p-8 rounded-3xl flex flex-col h-full bg-white/[0.02] hud-border hud-corner-extra relative overflow-hidden"
+          className="glass-card-elevated p-6 rounded-3xl flex flex-col h-full hud-border hud-corner-extra relative overflow-hidden"
         >
           <div className="scanline opacity-5" />
-          <h3 className="text-lg font-bold mb-8 flex items-center gap-3 uppercase tracking-widest relative z-10">
-             <div className="p-2 bg-emerald-500/10 rounded-lg"><Activity className="w-5 h-5 text-emerald-500" /></div>
-             Health Status
-          </h3>
-          <div className="space-y-8 flex-1 relative z-10">
+
+          <div className="flex items-center justify-between mb-6 relative z-10">
+            <h3 className="text-sm font-bold flex items-center gap-2.5 uppercase tracking-widest">
+              <div className="p-1.5 bg-emerald-500/10 rounded-lg"><Activity className="w-4 h-4 text-emerald-400" /></div>
+              Structure Health
+            </h3>
+            <span className="pill-muted">{structures.length} assets</span>
+          </div>
+
+          <div className="space-y-4 flex-1 relative z-10">
             {structures.map((item, idx) => (
               <Link key={idx} href={`/structures/${item.id}`} className="block group">
-                <div className="space-y-3">
-                  <div className="flex justify-between items-center">
-                    <div className="flex flex-col">
-                      <span className="text-sm font-bold text-foreground group-hover:text-primary transition-colors">{item.name}</span>
-                      <span className="text-[8px] font-mono text-white/20">ADDR: {item.id.toUpperCase()}</span>
+                <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.05] hover:border-white/10 hover:bg-white/[0.04] transition-all duration-200">
+                  <div className="flex justify-between items-start mb-2.5">
+                    <div>
+                      <span className="text-[13px] font-semibold text-white/85 group-hover:text-primary transition-colors leading-tight">{item.name}</span>
+                      <p className="text-[9px] font-mono text-white/20 mt-0.5">{item.id.toUpperCase()}</p>
                     </div>
                     <span className={cn(
-                      "text-[10px] font-black uppercase px-2 py-0.5 rounded border transition-colors",
-                      item.status === 'Safe' ? "text-emerald-500 border-emerald-500/20 bg-emerald-500/5" : 
-                      item.status === 'Warning' ? "text-yellow-500 border-yellow-500/20 bg-yellow-500/5" : 
-                      "text-red-500 border-red-500/20 bg-red-500/5"
+                      "pill text-[9px]",
+                      item.status === 'Safe'
+                        ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                        : item.status === 'Warning'
+                          ? "bg-yellow-500/10 text-yellow-300 border border-yellow-500/20"
+                          : "bg-red-500/10 text-red-400 border border-red-500/20"
                     )}>
-                      {item.status}
+                      {item.status === 'Safe' ? '✓' : item.status === 'Warning' ? '⚠' : '✕'} {item.status}
                     </span>
                   </div>
-                  <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden p-[1px]">
-                    <motion.div 
-                      initial={{ width: 0 }}
-                      animate={{ width: `${item.health}%` }}
-                      transition={{ duration: 1.5, delay: idx * 0.1 }}
-                      className={cn(
-                        "h-full rounded-full shadow-[0_0_10px_rgba(255,255,255,0.1)]",
-                        item.health > 80 ? "bg-emerald-500 shadow-emerald-500/40" : item.health > 50 ? "bg-yellow-500 shadow-yellow-500/40" : "bg-red-500 shadow-red-500/40"
-                      )}
-                    />
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 h-1 bg-white/5 rounded-full overflow-hidden">
+                      <motion.div 
+                        initial={{ width: 0 }}
+                        animate={{ width: `${item.health}%` }}
+                        transition={{ duration: 1.2, delay: idx * 0.1, ease: "easeOut" }}
+                        className={cn(
+                          "h-full rounded-full",
+                          item.health > 80
+                            ? "bg-gradient-to-r from-emerald-600 to-emerald-400"
+                            : item.health > 50
+                              ? "bg-gradient-to-r from-yellow-600 to-yellow-400"
+                              : "bg-gradient-to-r from-red-700 to-red-500"
+                        )}
+                      />
+                    </div>
+                    <span className="text-[11px] font-black text-mono-stat text-white/50 w-10 text-right">{item.health.toFixed(1)}%</span>
                   </div>
                 </div>
               </Link>
@@ -258,11 +272,11 @@ export default function Dashboard() {
           </div>
           
           <Link 
-            href="/structures" 
-            className="mt-10 group flex items-center justify-center gap-3 w-full py-4 rounded-2xl bg-white/5 border border-white/10 hover:bg-primary/20 hover:text-primary hover:border-primary/50 transition-all duration-300 text-[10px] font-black uppercase tracking-[0.2em] relative z-10"
+            href="/structures"
+            className="mt-4 group flex items-center justify-center gap-2 w-full py-3 rounded-xl bg-primary/5 border border-primary/15 hover:bg-primary/10 hover:border-primary/30 transition-all duration-200 text-[10px] font-black uppercase tracking-[0.2em] text-primary relative z-10"
           >
-            Expand Fleet Inventory
-            <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+            Full Fleet Inventory
+            <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
           </Link>
         </motion.div>
       </div>
