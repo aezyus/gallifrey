@@ -26,6 +26,8 @@ export default function StructureDetail() {
   const [sensorName, setSensorName] = useState("");
   const [sensorType, setSensorType] = useState("strain_gauge");
   const [busy, setBusy] = useState(false);
+  const [activeTab, setActiveTab] = useState<"overview" | "sensors" | "events" | "maintenance">("overview");
+  const [lastUpdated, setLastUpdated] = useState("--:--:--");
 
   const { lastResponse, isConnected } = useAnomalySocket({
     autoTelemetry: true,
@@ -66,6 +68,7 @@ export default function StructureDetail() {
     const health = Math.max(20, Math.min(99, 96 - ifScore * 120 - recon * 600));
 
     setCurrentVibration(vibration.toFixed(2));
+    setLastUpdated(new Date().toLocaleTimeString([], { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" }));
     setHistory((prev) => {
       const next = [
         ...prev,
@@ -167,6 +170,30 @@ export default function StructureDetail() {
         </div>
       </header>
 
+      <div className="flex flex-wrap gap-2">
+        {([
+          ["overview", "Overview"],
+          ["sensors", "Sensors"],
+          ["events", "Events"],
+          ["maintenance", "Maintenance"],
+        ] as const).map(([key, label]) => (
+          <button
+            key={key}
+            onClick={() => setActiveTab(key)}
+            className={cn(
+              "px-3 py-2 rounded-lg border text-[10px] uppercase tracking-[0.2em] font-bold",
+              activeTab === key
+                ? "border-primary/40 bg-primary/10 text-primary"
+                : "border-white/15 text-white/60"
+            )}
+          >
+            {label}
+          </button>
+        ))}
+        <span className="ml-auto text-[10px] uppercase tracking-[0.2em] text-white/40 self-center">Last Updated: {lastUpdated}</span>
+      </div>
+
+      {activeTab === "overview" ? (
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
         {/* Overviews */}
         <div className="lg:col-span-3 space-y-8">
@@ -272,6 +299,104 @@ export default function StructureDetail() {
           </div>
         </div>
       </div>
+      ) : null}
+
+      {activeTab === "sensors" ? (
+        <div className="glass-card rounded-2xl p-6 space-y-6">
+          <div className="flex flex-wrap gap-3 items-end">
+            <div className="flex-1 min-w-[220px]">
+              <label className="text-[10px] uppercase tracking-[0.2em] text-white/50">Sensor name</label>
+              <input
+                value={sensorName}
+                onChange={(e) => setSensorName(e.target.value)}
+                className="mt-2 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm"
+                placeholder="e.g. Deck Strain Node"
+              />
+            </div>
+            <div className="min-w-[180px]">
+              <label className="text-[10px] uppercase tracking-[0.2em] text-white/50">Type</label>
+              <select
+                value={sensorType}
+                onChange={(e) => setSensorType(e.target.value)}
+                className="mt-2 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm"
+              >
+                <option value="strain_gauge">Strain Gauge</option>
+                <option value="accelerometer">Accelerometer</option>
+                <option value="temperature">Temperature</option>
+                <option value="displacement">Displacement</option>
+              </select>
+            </div>
+            <button
+              onClick={handleAddSensor}
+              disabled={busy}
+              className="px-4 py-2 rounded-lg border border-primary/30 bg-primary/10 text-primary text-[10px] uppercase tracking-[0.2em] font-bold disabled:opacity-50"
+            >
+              Add Sensor
+            </button>
+          </div>
+
+          <div className="overflow-x-auto rounded-xl border border-white/10">
+            <table className="w-full text-sm">
+              <thead className="bg-white/5 text-[10px] uppercase tracking-[0.2em] text-white/50">
+                <tr>
+                  <th className="text-left p-3">Name</th>
+                  <th className="text-left p-3">Type</th>
+                  <th className="text-left p-3">Location</th>
+                  <th className="text-left p-3">Health</th>
+                  <th className="text-left p-3">Last Data</th>
+                  <th className="text-left p-3">Calibration</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sensors.map((sensor) => (
+                  <tr key={sensor.id} className="border-t border-white/5">
+                    <td className="p-3">{sensor.name}</td>
+                    <td className="p-3 text-white/70">{sensor.type}</td>
+                    <td className="p-3 text-white/70">({sensor.x}, {sensor.y}, {sensor.z})</td>
+                    <td className="p-3"><span className="status-healthy font-bold">Nominal</span></td>
+                    <td className="p-3 text-white/70">{lastUpdated}</td>
+                    <td className="p-3 text-white/70">{sensor.connected ? "Calibrated" : "Pending"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : null}
+
+      {activeTab === "events" ? (
+        <div className="glass-card rounded-2xl p-6 space-y-4">
+          <h3 className="text-sm uppercase tracking-[0.2em] text-white/50 font-bold">Event Timeline</h3>
+          <div className="space-y-3">
+            {history.slice(-10).reverse().map((point, idx) => {
+              const severity = point.health < 60 ? "critical" : point.health < 80 ? "warning" : "healthy";
+              return (
+                <div key={`${point.time}-${idx}`} className="rounded-lg border border-white/10 bg-black/20 px-4 py-3 flex justify-between items-center">
+                  <div>
+                    <p className="text-sm">Health sample: {point.health.toFixed(1)}%</p>
+                    <p className="text-xs text-white/50">{point.time}</p>
+                  </div>
+                  <span className={cn("text-[10px] uppercase tracking-[0.2em] font-bold", severity === "critical" ? "status-critical" : severity === "warning" ? "status-warning" : "status-healthy")}>{severity}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
+
+      {activeTab === "maintenance" ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="glass-card rounded-2xl p-6">
+            <h3 className="text-sm uppercase tracking-[0.2em] text-white/50 font-bold">Recommended Action</h3>
+            <p className="mt-3 text-sm text-white/80">Schedule inspection within 24h for high-vibration zones and crack propagation checkpoints.</p>
+          </div>
+          <div className="glass-card rounded-2xl p-6">
+            <h3 className="text-sm uppercase tracking-[0.2em] text-white/50 font-bold">Estimated Cost</h3>
+            <p className="mt-3 text-2xl font-black text-primary">$48,000</p>
+            <p className="text-xs text-white/50">Preventive action estimate for current risk state.</p>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

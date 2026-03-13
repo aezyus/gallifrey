@@ -5,6 +5,7 @@ import { Send, X, Bot, User, Sparkles, AlertCircle, BarChart3, Fingerprint } fro
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { gallifreyApi } from "@/lib/api";
+import { useParams, usePathname } from "next/navigation";
 
 interface Message {
   role: 'user' | 'assistant';
@@ -15,13 +16,16 @@ interface MetadataResponse {
   feature_columns?: string[];
 }
 
-const SUGGESTIONS = [
+const BASE_SUGGESTIONS = [
   { text: "System Health Summary", icon: Fingerprint },
   { text: "Predict Risk for Bridge-A4", icon: AlertCircle },
   { text: "Current Sensor Features", icon: BarChart3 },
 ];
 
 export function AIAssistant() {
+  const pathname = usePathname();
+  const params = useParams<{ id?: string }>();
+  const contextStructureId = params?.id ? String(params.id) : null;
   const [isOpen, setIsOpen] = useState(false);
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
@@ -31,6 +35,16 @@ export function AIAssistant() {
   const [metadata, setMetadata] = useState<MetadataResponse | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const threadIdRef = useRef<string>(`thread-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
+
+  const contextualSuggestions = [
+    ...BASE_SUGGESTIONS,
+    ...(pathname.startsWith("/structures")
+      ? [{ text: `Explain risk for structure ${contextStructureId ?? "selected"}`, icon: AlertCircle }]
+      : []),
+    ...(pathname.startsWith("/alerts")
+      ? [{ text: "Summarize pending critical alerts and next action", icon: Fingerprint }]
+      : []),
+  ];
 
   useEffect(() => {
     gallifreyApi.getMetadata().then(setMetadata).catch(console.error);
@@ -51,7 +65,8 @@ export function AIAssistant() {
     setIsTyping(true);
 
     try {
-      const chatRes = await gallifreyApi.sendChat(textToSend, threadIdRef.current);
+      const contextualMessage = `Context: path=${pathname}${contextStructureId ? `, structure_id=${contextStructureId}` : ""}. User request: ${textToSend}. Please include recommended action and estimated urgency.`;
+      const chatRes = await gallifreyApi.sendChat(contextualMessage, threadIdRef.current);
       setMessages(prev => [...prev, { role: 'assistant', content: chatRes.response }]);
     } catch (error) {
        console.error("Chat failure", error);
@@ -153,7 +168,7 @@ export function AIAssistant() {
 
             {/* Smart Suggestions */}
             <div className="px-6 pb-2 flex gap-2 overflow-x-auto scroll-hide">
-               {SUGGESTIONS.map((s, i) => (
+              {contextualSuggestions.map((s, i) => (
                  <button 
                   key={i}
                   onClick={() => handleSend(s.text)}

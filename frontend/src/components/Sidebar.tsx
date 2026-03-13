@@ -13,7 +13,9 @@ import {
   Construction,
   Bot,
   Terminal,
-  Cpu
+  Cpu,
+  Menu,
+  X
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
@@ -32,6 +34,7 @@ export function Sidebar() {
   const pathname = usePathname();
   const [mlStatus, setMlStatus] = useState(false);
   const [agenticStatus, setAgenticStatus] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   useEffect(() => {
     const probe = async () => {
@@ -57,7 +60,21 @@ export function Sidebar() {
   const coreOnline = mlStatus && agenticStatus;
 
   return (
-    <aside className="fixed left-0 top-0 h-screen w-64 glass-card border-r border-white/5 flex flex-col z-50">
+    <>
+      <button
+        onClick={() => setMobileOpen((prev) => !prev)}
+        className="md:hidden fixed left-4 top-4 z-[60] rounded-xl border border-white/15 bg-black/70 p-2 text-white"
+        aria-label="Toggle navigation"
+      >
+        {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+      </button>
+
+      <aside
+        className={cn(
+          "fixed left-0 top-0 h-screen w-64 glass-card border-r border-white/5 flex flex-col z-50 transition-transform duration-300",
+          mobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
+        )}
+      >
       <div className="p-8">
         <div className="flex items-center gap-3 mb-10 group">
           <div className="w-10 h-10 bg-primary/20 rounded-xl flex items-center justify-center border border-primary/40 group-hover:scale-110 transition-transform">
@@ -138,5 +155,6 @@ export function Sidebar() {
         </div>
       </div>
     </aside>
+    </>
   );
 }

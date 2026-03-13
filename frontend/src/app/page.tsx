@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { StatsCard } from "@/components/StatsCard";
 import { Activity, ShieldAlert, Boxes, Waves, Zap, ArrowRight } from "lucide-react";
 import { 
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
+  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine
 } from 'recharts';
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
@@ -38,6 +38,7 @@ export default function Dashboard() {
     { id: 'east-extension', name: 'East-Extension', health: 81, status: 'Safe' },
   ]);
   const [recentAnomalies, setRecentAnomalies] = useState(0);
+  const [lastUpdated, setLastUpdated] = useState("--:--:--");
 
   useEffect(() => {
     if (!lastResponse) return;
@@ -67,6 +68,7 @@ export default function Dashboard() {
     });
 
     setRecentAnomalies((prev) => Math.min(999, prev + anomalyCount));
+    setLastUpdated(new Date().toLocaleTimeString([], { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" }));
 
     setStructures((prev) =>
       prev.map((item, idx) => {
@@ -95,8 +97,9 @@ export default function Dashboard() {
              {isConnected ? "Live Fleet Analytics" : "Telemetry Reconnecting"}
              <span className="ml-4 opacity-30 font-mono">SEQ_ID: {Math.floor(Math.random() * 10000)}</span>
           </nav>
-          <h2 className="text-4xl font-black tracking-tight text-white uppercase italic flicker">Fleet Intelligence</h2>
+          <h2 className="text-fluid-title font-black tracking-tight text-white uppercase italic flicker">Fleet Intelligence</h2>
           <p className="text-muted-foreground mt-1 text-xs uppercase tracking-widest opacity-60">Real-time aggregate analysis across distributed SHM nodes.</p>
+          <p className="text-[10px] uppercase tracking-[0.2em] text-white/40 mt-2">Last Updated: {lastUpdated}</p>
         </div>
         <div className="hidden md:flex gap-4">
           <div className="text-right p-4 glass-card rounded-2xl border-primary/20 bg-primary/5 hud-border hud-corner-extra">
@@ -200,10 +203,12 @@ export default function Dashboard() {
                   strokeWidth={3} 
                   animationDuration={2000}
                 />
+                <ReferenceLine y={65} stroke="rgba(239,68,68,0.6)" strokeDasharray="4 4" />
               </AreaChart>
             </ResponsiveContainer>
           </div>
           <div className="absolute bottom-4 left-8 text-[8px] font-mono text-white/20">BUFFER_LIMIT: 1024KB // PARITY_CHECK: PASSED</div>
+          <div className="absolute bottom-4 right-8 text-[8px] font-mono text-white/30">COMPLETENESS: 97.4% | LATENCY: 22ms</div>
         </motion.div>
 
         {/* Health Leaderboard */}

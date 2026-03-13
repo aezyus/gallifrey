@@ -4,6 +4,7 @@ import "./globals.css";
 import { Sidebar } from "@/components/Sidebar";
 import { BackgroundEffects } from "@/components/BackgroundEffects";
 import { AIAssistant } from "@/components/AIAssistant";
+import { CriticalAlertBanner } from "@/components/CriticalAlertBanner";
 
 const outfit = Outfit({ subsets: ["latin"] });
 
@@ -23,11 +24,12 @@ export default function RootLayout({
         <BackgroundEffects />
         <div className="flex h-screen w-screen bg-transparent text-foreground selection:bg-primary/30 relative z-10">
           <Sidebar />
-          <main className="flex-1 ml-64 overflow-y-auto overflow-x-hidden scroll-hide relative">
+          <main className="flex-1 md:ml-64 overflow-y-auto overflow-x-hidden scroll-hide relative pt-16 md:pt-0">
             {/* Background Grain/Overlay */}
             <div className="fixed inset-0 pointer-events-none opacity-[0.03] mix-blend-overlay bg-[url('https://grainy-gradients.vercel.app/noise.svg')]" />
             
             <div className="p-8 max-w-[1600px] mx-auto min-h-full flex flex-col relative z-10">
+              <CriticalAlertBanner />
               {children}
             </div>
             

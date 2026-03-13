@@ -24,6 +24,10 @@
     --input: 240 5% 15%;
     --ring: 180 100% 50%;
     --radius: 0.75rem;
+    --status-healthy: 142 72% 45%;
+    --status-warning: 45 98% 55%;
+    --status-critical: 0 84% 60%;
+    --status-unknown: 215 16% 55%;
   }
 
   body {
@@ -105,5 +109,22 @@
   .scroll-hide {
     -ms-overflow-style: none;
     scrollbar-width: none;
+  }
+
+  .text-fluid-title {
+    font-size: clamp(1.6rem, 1.4rem + 1.2vw, 2.35rem);
+    line-height: 1.1;
+  }
+
+  .status-healthy {
+    color: hsl(var(--status-healthy));
+  }
+
+  .status-warning {
+    color: hsl(var(--status-warning));
+  }
+
+  .status-critical {
+    color: hsl(var(--status-critical));
   }
 }
