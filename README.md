@@ -111,12 +111,21 @@ Built with **Next.js 14 + React 18 + Tailwind CSS + Framer Motion**:
 | `AIAssistant` | Floating chat widget; reads current page + structure context and prepends it to every LLM request |
 | `Bridge3D` | React Three Fiber 3D bridge model; SSR-safe with WebGL detection and graceful fallback |
 | `Sidebar` | Fixed nav with mobile responsive toggle (hamburger → slide-in panel) |
+| `StatsCard` | Variant-aware KPI card with trend badges, accent strips, and animated visual hierarchy |
 | `WaveletScalogram` | CWT scalogram visualization |
 
 **Design System:**
 - Custom CSS tokens: `--status-healthy`, `--status-warning`, `--status-critical`, `--status-unknown`
-- Fluid typography: `.text-fluid-title` via `clamp()`
-- Glassmorphism utility classes: `glass-card`, `hud-border`, `grid-bg`, `scanline`
+- Fluid typography: `.text-fluid-title` via `clamp()` + tabular stat numerics (`.text-mono-stat`)
+- Glassmorphism utility classes: `glass-card`, `glass-card-elevated`, `hud-border`, `grid-bg`, `scanline`
+- Status and badge system: `status-dot-*` pulse indicators + `pill-*` semantic badges
+- Visual accents: `card-accent-*` left rails, glow utilities, and shimmer overlays
+
+**Latest UI Polish Pass (March 2026):**
+- Redesigned alert triage rows with severity rails, compact actions, and batch-flow emphasis
+- Refined analytics panels with stronger data hierarchy and explainability visualization
+- Upgraded sidebar service health section with live status-dot telemetry indicators
+- Improved dashboard health leaderboard readability and progress semantics
 
 ### 6. Monitoring Infrastructure (`infra/`)
 
